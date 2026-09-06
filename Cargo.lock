@@ -1159,6 +1159,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "postgraph_smtp_bench"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "pretty_env_logger",
+ "smtp",
+ "tokio",
+]
+
+[[package]]
 name = "potential_utf"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -4,5 +4,6 @@ members = [
     "lib/mail_proxy",
     "lib/ms_graph",
     "lib/smtp",
-    "app/postgraph"
+    "app/postgraph",
+    "app/smtp_bench"
 ]
