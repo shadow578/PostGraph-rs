@@ -1,8 +1,10 @@
-use crate::util::{existing_file, mask_string, prompt_user_confirmation};
+use crate::util::{existing_file, mask_string, parse_ip_net, prompt_user_confirmation};
 use base64::Engine;
 use clap::{ArgGroup, Parser};
 use humantime::{format_duration, parse_duration};
+use ipnet::IpNet;
 use mail_proxy::config_file::{ConfigFile, Fail2BanConfig, TLSConfig};
+use mail_proxy::ip_net_list::IpNetList;
 use ms_graph::client::Client as GraphClient;
 use ms_graph::{API_MAX_MESSAGE_SIZE, RECOMMENDED_MAX_MESSAGE_SIZE};
 use std::time::Duration;
@@ -142,7 +144,14 @@ pub(crate) enum SmtpCommand
         reset: bool,
     },
 
-    /// Manage SMTP server TLS configuration
+    /// Manage SMTP peer allowlist.
+    #[command()]
+    Peers {
+        #[command(subcommand)]
+        command: PeersCommand
+    },
+
+    /// Manage SMTP server TLS configuration.
     #[command()]
     Tls {
         #[command(subcommand)]
@@ -200,6 +209,10 @@ impl SmtpCommand
 
                 Self::show(config);
             }
+            SmtpCommand::Peers { command } => {
+                command.execute(config).await;
+                Self::show(config);
+            }
             SmtpCommand::Tls { command } => {
                 command.execute(config).await;
                 Self::show(config);
@@ -235,6 +248,15 @@ impl SmtpCommand
         println!(" Max Failures: {}", max_failures);
         println!(" Ban Duration: {}", format_duration(ban_duration));
 
+        // only print allowlist if configured
+        if let Some(allowlist) = config.smtp.peer_allowlist.as_ref() {
+            println!();
+            println!("Peer Allowlist:");
+            for net in allowlist.iter() {
+                println!(" {}", net.to_string());
+            }
+        }
+
         println!();
         print!("TLS Configuration:");
         if let Some(tls) = &config.smtp.tls
@@ -251,6 +273,51 @@ impl SmtpCommand
         }
 
         show_insecure_auth_warning(config);
+    }
+}
+
+#[derive(Parser, Debug)]
+pub(crate) enum PeersCommand
+{
+    /// Allow an IP network.
+    #[command()]
+    Allow {
+        /// The IP network to add.
+        #[clap(value_parser = parse_ip_net)]
+        network: IpNet
+    },
+
+    /// Remove an IP network from the list.
+    #[command()]
+    Remove {
+        /// The IP network to remove.
+        #[clap(value_parser = parse_ip_net)]
+        network: IpNet
+    },
+}
+
+impl PeersCommand
+{
+    pub(crate) async fn execute(&self, config: &mut ConfigFile)
+    {
+        match self {
+            PeersCommand::Allow { network } => {
+                if config.smtp.peer_allowlist.is_none() {
+                    config.smtp.peer_allowlist = Some(IpNetList::new())
+                }
+
+                config.smtp.peer_allowlist.as_mut().unwrap().add(*network);
+            }
+            PeersCommand::Remove { network } => {
+                if let Some(allowlist) = config.smtp.peer_allowlist.as_mut() {
+                    allowlist.remove(*network);
+
+                    if allowlist.is_empty() {
+                        config.smtp.peer_allowlist = None;
+                    }
+                }
+            }
+        }
     }
 }
 

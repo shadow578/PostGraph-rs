@@ -53,6 +53,14 @@ impl ProxyHandler
 #[async_trait]
 impl SmtpHandler for ProxyHandler {
     async fn on_connect(&mut self, peer_addr: IpAddr) -> std::result::Result<ConnectResult, Box<dyn Error + Send + Sync>> {
+        // connection peer filter
+        if let Some(allowlist) = self.config.smtp.peer_allowlist.as_ref() {
+            if !allowlist.contains(peer_addr) {
+                return Ok(ConnectResult::Reject);
+            }
+        }
+
+        // fail2ban logic
         self.productive = false;
 
         let mut fail2ban = self.fail2ban.lock().await;

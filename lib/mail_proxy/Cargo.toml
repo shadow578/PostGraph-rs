@@ -7,6 +7,7 @@ edition = "2024"
 anyhow = "1"
 argon2 = { version = "0.6.0" }
 async-trait = "0.1.92"
+ipnet = "2.12.2"
 log = "0.4.33"
 password-hash = "0.6.1"
 serde = { version = "1.0.229", features = ["derive"] }
