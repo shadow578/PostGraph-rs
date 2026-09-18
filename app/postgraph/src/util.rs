@@ -1,6 +1,7 @@
 use ipnet::IpNet;
 use std::io;
 use std::io::Write;
+use std::net::IpAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -16,7 +17,16 @@ pub(crate) fn existing_file(path: &str) -> Result<String, String> {
     }
 }
 
-// CLAP validator that parses validates a IpNet.
+// CLAP validator that parses validates an IpAddr.
+pub(crate) fn parse_ip_addr(net: &str) -> Result<IpAddr, String> {
+    if let Ok(ip) = IpAddr::from_str(net) {
+        Ok(ip)
+    } else {
+        Err(format!("'{}' is not a valid IP address.", net))
+    }
+}
+
+// CLAP validator that parses validates an IpNet.
 pub(crate) fn parse_ip_net(net: &str) -> Result<IpNet, String> {
     if let Ok(net) = IpNet::from_str(net) {
         Ok(net)

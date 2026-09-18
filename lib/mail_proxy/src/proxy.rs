@@ -54,8 +54,13 @@ impl ProxyHandler
 impl SmtpHandler for ProxyHandler {
     async fn on_connect(&mut self, peer_addr: IpAddr) -> std::result::Result<ConnectResult, Box<dyn Error + Send + Sync>> {
         // connection peer filter
-        if let Some(allowlist) = self.config.smtp.peer_allowlist.as_ref() {
+        if let Some(allowlist) = self.config.smtp.allowed_peers.as_ref() {
             if !allowlist.contains(peer_addr) {
+                return Ok(ConnectResult::Reject);
+            }
+        }
+        if let Some(denylist) = self.config.smtp.denied_peers.as_ref() {
+            if denylist.contains(peer_addr) {
                 return Ok(ConnectResult::Reject);
             }
         }

@@ -39,7 +39,8 @@ impl ConfigFile
                 tls: None,
                 fail2ban: None,
                 auth: UserAuth::new(),
-                peer_allowlist: None,
+                allowed_peers: None,
+                denied_peers: None,
             },
             graph: GraphAPIConfig {
                 tenant_id: String::new(),
@@ -108,7 +109,12 @@ pub struct SMTPServerConfig
     /// list of allowed peer IPs.
     /// if None, any peer is accepted.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub peer_allowlist: Option<IpNetList>,
+    pub allowed_peers: Option<IpNetList>,
+
+    /// list of denied peer IPs.
+    /// if None, no peer is denied.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denied_peers: Option<IpNetList>,
 }
 
 impl SMTPServerConfig
