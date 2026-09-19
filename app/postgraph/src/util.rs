@@ -1,6 +1,9 @@
+use ipnet::IpNet;
 use std::io;
 use std::io::Write;
+use std::net::IpAddr;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 // CLAP validator that validates file path exists.
 pub(crate) fn existing_file(path: &str) -> Result<String, String> {
@@ -11,6 +14,24 @@ pub(crate) fn existing_file(path: &str) -> Result<String, String> {
         Ok(path.to_string_lossy().to_string())
     } else {
         Err(format!("'{}' is not a file", path.display()))
+    }
+}
+
+// CLAP validator that parses validates an IpAddr.
+pub(crate) fn parse_ip_addr(net: &str) -> Result<IpAddr, String> {
+    if let Ok(ip) = IpAddr::from_str(net) {
+        Ok(ip)
+    } else {
+        Err(format!("'{}' is not a valid IP address.", net))
+    }
+}
+
+// CLAP validator that parses validates an IpNet.
+pub(crate) fn parse_ip_net(net: &str) -> Result<IpNet, String> {
+    if let Ok(net) = IpNet::from_str(net) {
+        Ok(net)
+    } else {
+        Err(format!("'{}' is not a valid IP network in CIDR notation.", net))
     }
 }
 

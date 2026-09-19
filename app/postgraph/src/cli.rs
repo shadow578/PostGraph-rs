@@ -1,10 +1,13 @@
-use crate::util::{existing_file, mask_string, prompt_user_confirmation};
+use crate::util::{existing_file, mask_string, parse_ip_addr, parse_ip_net, prompt_user_confirmation};
 use base64::Engine;
 use clap::{ArgGroup, Parser};
 use humantime::{format_duration, parse_duration};
+use ipnet::IpNet;
 use mail_proxy::config_file::{ConfigFile, Fail2BanConfig, TLSConfig};
+use mail_proxy::ip_net_list::IpNetList;
 use ms_graph::client::Client as GraphClient;
 use ms_graph::{API_MAX_MESSAGE_SIZE, RECOMMENDED_MAX_MESSAGE_SIZE};
+use std::net::IpAddr;
 use std::time::Duration;
 
 /// PostGraph: A SMTP to Microsoft Graph API mail proxy, developed by Chris.
@@ -142,7 +145,14 @@ pub(crate) enum SmtpCommand
         reset: bool,
     },
 
-    /// Manage SMTP server TLS configuration
+    /// Manage SMTP client allow- and deny-list.
+    #[command()]
+    Peers {
+        #[command(subcommand)]
+        command: PeersCommand
+    },
+
+    /// Manage SMTP server TLS configuration.
     #[command()]
     Tls {
         #[command(subcommand)]
@@ -200,6 +210,9 @@ impl SmtpCommand
 
                 Self::show(config);
             }
+            SmtpCommand::Peers { command } => {
+                command.execute(config).await;
+            }
             SmtpCommand::Tls { command } => {
                 command.execute(config).await;
                 Self::show(config);
@@ -235,10 +248,14 @@ impl SmtpCommand
         println!(" Max Failures: {}", max_failures);
         println!(" Ban Duration: {}", format_duration(ban_duration));
 
+        if config.smtp.allowed_peers.is_some() || config.smtp.denied_peers.is_some() {
+            println!();
+            PeersCommand::show(config);
+        }
+
         println!();
         print!("TLS Configuration:");
-        if let Some(tls) = &config.smtp.tls
-        {
+        if let Some(tls) = &config.smtp.tls {
             println!();
             println!(" Certificate Chain: ");
             for cert in &tls.certificate_chain {
@@ -251,6 +268,128 @@ impl SmtpCommand
         }
 
         show_insecure_auth_warning(config);
+    }
+}
+
+#[derive(Parser, Debug)]
+pub(crate) enum PeersCommand
+{
+    /// Add an IP subnet to the allow list.
+    #[command()]
+    Allow {
+        /// The IP network to add.
+        #[clap(value_parser = parse_ip_net)]
+        network: IpNet
+    },
+
+    /// Add an IP subnet to the deny list.
+    #[command()]
+    Deny {
+        /// The IP network to add.
+        #[clap(value_parser = parse_ip_net)]
+        network: IpNet
+    },
+
+    /// Remove an IP network from *both* the allow and deny list.
+    #[command()]
+    Remove {
+        /// The IP network to remove.
+        #[clap(value_parser = parse_ip_net)]
+        network: IpNet
+    },
+
+    /// Test if an IP address matches against the allow and deny list.
+    #[command()]
+    Test {
+        /// The IP to test.
+        #[clap(value_parser = parse_ip_addr)]
+        ip: IpAddr
+    },
+
+    /// Show the current peer allow and deny list.
+    #[command()]
+    Show,
+}
+
+impl PeersCommand
+{
+    pub(crate) async fn execute(&self, config: &mut ConfigFile)
+    {
+        match self {
+            PeersCommand::Allow { network } => {
+                if config.smtp.allowed_peers.is_none() {
+                    config.smtp.allowed_peers = Some(IpNetList::default())
+                }
+
+                config.smtp.allowed_peers.as_mut().unwrap().add(*network);
+
+                Self::show(config);
+            }
+            PeersCommand::Deny { network } => {
+                if config.smtp.denied_peers.is_none() {
+                    config.smtp.denied_peers = Some(IpNetList::default())
+                }
+
+                config.smtp.denied_peers.as_mut().unwrap().add(*network);
+
+                Self::show(config);
+            }
+            PeersCommand::Remove { network } => {
+                if let Some(allowlist) = config.smtp.allowed_peers.as_mut() {
+                    allowlist.remove(*network);
+                    if allowlist.is_empty() {
+                        config.smtp.allowed_peers = None;
+                    }
+                }
+
+                if let Some(denylist) = config.smtp.denied_peers.as_mut() {
+                    denylist.remove(*network);
+                    if denylist.is_empty() {
+                        config.smtp.denied_peers = None;
+                    }
+                }
+
+                Self::show(config);
+            }
+            PeersCommand::Test { ip } => {
+                if let Some(allowlist) = config.smtp.allowed_peers.as_ref()
+                    && !allowlist.contains(*ip) {
+                    println!("Peer IP '{}' will be rejected because it is not included in the allow list.", ip);
+                    return;
+                }
+                if let Some(denylist) = config.smtp.denied_peers.as_ref()
+                    && denylist.contains(*ip) {
+                    println!("Peer IP '{}' will be rejected because it is included in the deny list.", ip);
+                    return;
+                }
+
+                println!("Peer IP '{}' will be accepted.", ip);
+            }
+            PeersCommand::Show => Self::show(config),
+        }
+    }
+
+    pub(crate) fn show(config: &ConfigFile)
+    {
+        let mut printed_allowlist = false;
+        if let Some(allowlist) = config.smtp.allowed_peers.as_ref() {
+            printed_allowlist = true;
+            println!("Only allow peers in these subnets:");
+            for net in allowlist.iter() {
+                println!(" - {}", net);
+            }
+        }
+
+        if let Some(denylist) = config.smtp.denied_peers.as_ref() {
+            if printed_allowlist {
+                println!()
+            }
+
+            println!("Deny all peers in these subnets:");
+            for net in denylist.iter() {
+                println!(" - {}", net);
+            }
+        }
     }
 }
 
