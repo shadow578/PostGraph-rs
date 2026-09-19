@@ -710,13 +710,21 @@ impl UserSendAsCommand {
                 }
             }
             UserSendAsCommand::Show => {
+                if !config.smtp.users.has_user(username) {
+                    eprintln!("User '{}' does not exist", username);
+                    return;
+                }
+
                 println!("User '{}' is allowed to send as:", username);
 
                 // username is implicitly included in senders
                 println!(" - {}", username);
 
-                for sender in config.smtp.users.list_user_send_as(username).unwrap() {
-                    println!(" - {}", sender);
+                if let Ok(senders) = config.smtp.users.list_user_send_as(username)
+                {
+                    for sender in senders {
+                        println!(" - {}", sender);
+                    }
                 }
             }
         }

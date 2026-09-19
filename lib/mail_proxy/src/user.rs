@@ -85,6 +85,8 @@ impl UserList
     /// password: new password to set.
     pub fn set_user_password(&mut self, username: &str, password: &str) -> anyhow::Result<()>
     {
+        let username = username.to_lowercase();
+
         debug!("Updating user password for {}", username);
 
         let hash = Argon2::default()
@@ -100,8 +102,10 @@ impl UserList
     /// username: username to remove.
     pub fn remove_user(&mut self, username: &str) -> anyhow::Result<()>
     {
+        let username = username.to_lowercase();
+
         debug!("Removing user {}", username);
-        self.users.remove(username).ok_or_else(|| anyhow!("User not found"))?;
+        self.users.remove(&username).ok_or_else(|| anyhow!("User not found"))?;
         Ok(())
     }
 
@@ -109,7 +113,9 @@ impl UserList
     /// username: the username to check for.
     pub fn has_user(&self, username: &str) -> bool
     {
-        self.users.contains_key(username)
+        let username = username.to_lowercase();
+
+        self.users.contains_key(&username)
     }
 
     /// are any users configured, enabling authentication?
@@ -129,7 +135,9 @@ impl UserList
     /// password: clear-text password to validate is correct.
     pub(crate) fn verify_user_password(&self, username: &str, password: &str) -> anyhow::Result<()>
     {
-        let hash = &self.users.get(username)
+        let username = username.to_lowercase();
+
+        let hash = &self.users.get(&username)
             .ok_or_else(|| anyhow!("user {} not found", username))?
             .password;
 
@@ -145,9 +153,11 @@ impl UserList
     /// sender: sender address to add to allowed sender list.
     pub fn add_user_send_as(&mut self, username: &str, sender: &str) -> anyhow::Result<()>
     {
+        let username = username.to_lowercase();
+
         debug!("Adding allowed sender {} for {}", sender, username);
 
-        self.users.get_mut(username)
+        self.users.get_mut(&username)
             .ok_or_else(|| anyhow!("user {} not found", username))?
             .allow_send_as
             .insert(sender.into());
@@ -160,9 +170,11 @@ impl UserList
     /// sender: sender address to add to allowed sender list.
     pub fn remove_user_send_as(&mut self, username: &str, sender: &str) -> anyhow::Result<()>
     {
+        let username = username.to_lowercase();
+
         debug!("Removing allowed sender {} for {}", sender, username);
 
-        self.users.get_mut(username)
+        self.users.get_mut(&username)
             .ok_or_else(|| anyhow!("user {} not found", username))?
             .allow_send_as
             .remove::<String>(&sender.into());
@@ -174,8 +186,10 @@ impl UserList
     /// username: username to list for.
     pub fn list_user_send_as(&self, username: &str) -> anyhow::Result<impl ExactSizeIterator<Item=&String>>
     {
+        let username = username.to_lowercase();
+
         Ok(
-            self.users.get(username)
+            self.users.get(&username)
                 .ok_or_else(|| anyhow!("user {} not found", username))?
                 .allow_send_as
                 .iter()
@@ -187,6 +201,7 @@ impl UserList
     /// sender: sender address to check.
     pub(crate) fn verify_user_can_send_as(&self, username: &str, sender: &str) -> anyhow::Result<()>
     {
+        let username = username.to_lowercase();
         let sender = sender.to_lowercase();
 
         // check for username match
@@ -195,7 +210,7 @@ impl UserList
         }
 
         // check allow_send_as
-        let user = &self.users.get(username)
+        let user = &self.users.get(&username)
             .ok_or_else(|| anyhow!("user {} not found", username))?;
 
         for entry in &user.allow_send_as {
@@ -274,6 +289,27 @@ mod tests
     }
 
     #[test]
+    fn test_password_update() -> anyhow::Result<()>
+    {
+        let mut auth = UserList::default();
+
+        auth.set_user_password("alice@example.com", "hunter2")?;
+        auth.add_user_send_as("alice@example.com", "bob@example.com")?;
+
+        assert!(auth.verify_user_can_send_as("alice@example.com", "alice@example.com").is_ok());
+        assert!(auth.verify_user_can_send_as("alice@example.com", "bob@example.com").is_ok());
+
+        // update password
+        auth.set_user_password("alice@example.com", "hunter3")?;
+
+        // send as should remain
+        assert!(auth.verify_user_can_send_as("alice@example.com", "alice@example.com").is_ok());
+        assert!(auth.verify_user_can_send_as("alice@example.com", "bob@example.com").is_ok());
+
+        Ok(())
+    }
+
+    #[test]
     fn test_check_send_as() -> anyhow::Result<()>
     {
         let mut auth = UserList::default();
@@ -311,6 +347,9 @@ mod tests
 
         // don't care about case
         assert!(auth.verify_user_can_send_as("alice@example.com", "BOB@Example.com").is_ok());
+
+        // full domain must match
+        assert!(!auth.verify_user_can_send_as("alice@example.com", "bob@badexample.com").is_ok());
 
         Ok(())
     }
