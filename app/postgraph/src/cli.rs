@@ -37,6 +37,11 @@ pub(crate) enum CliCommand {
         service: bool,
     },
 
+    /// Register Windows Event Log source for PostGraph.
+    /// This command must be run with administrator privileges.
+    #[cfg(windows)]
+    RegisterEventlog,
+
     /// Manage PostGraph configuration.
     Config {
         #[clap(subcommand)]

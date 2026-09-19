@@ -24,6 +24,7 @@ mail_proxy = { path = "../../lib/mail_proxy" }
 ms_graph = { path = "../../lib/ms_graph" }
 
 [target.'cfg(windows)'.dependencies]
+eventlog = "0.4.0"
 windows-service = "0.8.1"
 
 [target.'cfg(windows)'.build-dependencies]
