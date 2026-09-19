@@ -71,7 +71,11 @@ impl<'de> Deserialize<'de> for UserList {
     where
         D: Deserializer<'de>,
     {
-        let users: HashMap<String, UserEntry> = HashMap::deserialize(deserializer)?;
+        let users: HashMap<String, UserEntry> = HashMap::<String, UserEntry>::deserialize(deserializer)?
+            .into_iter()
+            .map(|(user, entry)| (user.to_lowercase(), entry))
+            .collect();
+
         Ok(Self { users })
     }
 }
@@ -87,13 +91,17 @@ impl UserList
     {
         let username = username.to_lowercase();
 
-        debug!("Updating user password for {}", username);
-
         let hash = Argon2::default()
             .hash_password(password.as_bytes())
             .map_err(|_| anyhow!("could not set password"))?;
 
-        self.users.insert(username.into(), UserEntry { password: hash, allow_send_as: HashSet::new() });
+        if let Some(user) = self.users.get_mut(&username) {
+            debug!("Updating password for {}", username);
+            user.password = hash;
+        } else {
+            debug!("Adding user {}", username);
+            self.users.insert(username, UserEntry { password: hash, allow_send_as: HashSet::new() });
+        }
 
         Ok(())
     }
