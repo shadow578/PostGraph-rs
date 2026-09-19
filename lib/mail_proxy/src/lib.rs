@@ -3,5 +3,5 @@ pub mod proxy;
 mod fail2ban;
 mod defaults;
 mod custom_serde;
-mod auth;
+mod user;
 pub mod ip_net_list;

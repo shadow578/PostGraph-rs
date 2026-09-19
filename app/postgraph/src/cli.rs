@@ -85,7 +85,7 @@ impl ConfigCommand
         }
 
         // disable insecure auth when not needed
-        if config.smtp.allow_insecure_auth && (config.smtp.tls.is_some() || !config.smtp.auth.has_users()) {
+        if config.smtp.allow_insecure_auth && (config.smtp.tls.is_some() || !config.smtp.users.has_users()) {
             config.smtp.allow_insecure_auth = false;
         }
     }
@@ -590,7 +590,7 @@ impl UserCommand
             }
             UserCommand::Add { username, password, force } => {
                 println!("{} user {}",
-                         if config.smtp.auth.has_user(username) { "Updating" } else { "Adding" },
+                         if config.smtp.users.has_user(username) { "Updating" } else { "Adding" },
                          username
                 );
 
@@ -620,7 +620,7 @@ impl UserCommand
                     }
                 };
 
-                if let Err(err) = config.smtp.auth.set_user_password(username, &password)
+                if let Err(err) = config.smtp.users.set_user_password(username, &password)
                 {
                     eprintln!("Failed to update user: {}", err);
                 }
@@ -630,7 +630,7 @@ impl UserCommand
             }
             UserCommand::Remove { username } => {
                 println!("Removing user {}", username);
-                if let Err(err) = config.smtp.auth.remove_user(username)
+                if let Err(err) = config.smtp.users.remove_user(username)
                 {
                     eprintln!("Failed to remove user: {}", err);
                 }
@@ -643,7 +643,7 @@ impl UserCommand
 
     fn show(config: &ConfigFile)
     {
-        let users = config.smtp.auth.list_users();
+        let users = config.smtp.users.list_users();
 
         println!("Listing {} Users:", users.len());
         for user in users
@@ -695,7 +695,7 @@ impl AllowInsecureAuthCommand
 
 fn show_insecure_auth_warning(config: &ConfigFile)
 {
-    if config.smtp.tls.is_none() && config.smtp.auth.has_users() {
+    if config.smtp.tls.is_none() && config.smtp.users.has_users() {
         println!();
         println!("WARNING: You've configured user authentication, but have not configured TLS.");
 

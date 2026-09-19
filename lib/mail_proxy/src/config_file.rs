@@ -1,7 +1,7 @@
-use crate::auth::UserAuth;
 use crate::custom_serde::opt_duration_secs;
 use crate::defaults::{DEFAULT_FAIL2BAN_CONNECTIONS, DEFAULT_FAIL2BAN_DURATION, DEFAULT_FAIL2BAN_FAILS, DEFAULT_SMTP_BIND_ADDRESS};
 use crate::ip_net_list::IpNetList;
+use crate::user::UserList;
 use anyhow::{Result, anyhow};
 use log::debug;
 use ms_graph::RECOMMENDED_MAX_MESSAGE_SIZE;
@@ -38,7 +38,7 @@ impl ConfigFile
                 allow_insecure_auth: false,
                 tls: None,
                 fail2ban: None,
-                auth: UserAuth::new(),
+                users: UserList::new(),
                 allowed_peers: None,
                 denied_peers: None,
             },
@@ -103,8 +103,7 @@ pub struct SMTPServerConfig
     /// map key is username, entry contains password and metadata.
     /// username must equal a M365 user upn that is in-scope for the graph app.
     /// if no users are configured, authentication will be disabled.
-    #[serde(alias = "users")]
-    pub auth: UserAuth,
+    pub users: UserList,
 
     /// list of allowed peer IPs.
     /// if None, any peer is accepted.
@@ -136,7 +135,7 @@ impl SMTPServerConfig
         }
 
         config.with_auth(
-            if self.auth.has_users() {
+            if self.users.has_users() {
                 if self.tls.is_some() { AuthMode::RequireTls } else {
                     if self.allow_insecure_auth { AuthMode::Always } else { AuthMode::None }
                 }

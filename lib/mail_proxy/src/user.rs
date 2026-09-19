@@ -7,13 +7,13 @@ use std::collections::HashMap;
 use std::collections::hash_map::Keys;
 
 #[derive(Debug, Clone)]
-pub struct UserAuth
+pub struct UserList
 {
     users: HashMap<String, PasswordHash>,
 }
 
 // region: Serialize / Deserialize
-impl Serialize for UserAuth {
+impl Serialize for UserList {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -28,7 +28,7 @@ impl Serialize for UserAuth {
     }
 }
 
-impl<'de> Deserialize<'de> for UserAuth {
+impl<'de> Deserialize<'de> for UserList {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -50,7 +50,7 @@ impl<'de> Deserialize<'de> for UserAuth {
 // endregion
 
 // region: auth API
-impl UserAuth
+impl UserList
 {
     // create a new UserAuth instance without any users configured.
     pub fn new() -> Self {
@@ -128,7 +128,7 @@ mod tests
     #[test]
     fn test_user_auth() -> anyhow::Result<()>
     {
-        let mut auth = UserAuth::new();
+        let mut auth = UserList::new();
 
         // add two users
         auth.set_user_password("alice", "hunter2")?;
@@ -156,13 +156,13 @@ mod tests
     #[test]
     fn test_user_serialize() -> anyhow::Result<()>
     {
-        let mut auth = UserAuth::new();
+        let mut auth = UserList::new();
 
         auth.set_user_password("alice", "hunter2")?;
         assert!(auth.verify_user_password("alice", "hunter2").is_ok());
 
         let yaml = yaml_serde::to_string(&auth)?;
-        let auth: UserAuth = yaml_serde::from_str(&yaml)?;
+        let auth: UserList = yaml_serde::from_str(&yaml)?;
 
         assert!(auth.verify_user_password("alice", "hunter2").is_ok());
 

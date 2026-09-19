@@ -92,7 +92,7 @@ impl SmtpHandler for ProxyHandler {
     }
 
     async fn on_login(&mut self, username: String, password: String) -> Result<LoginResult, Box<dyn Error + Send + Sync>> {
-        match self.config.smtp.auth.verify_user_password(&username, &password)
+        match self.config.smtp.users.verify_user_password(&username, &password)
         {
             Ok(_) => {
                 self.username = Some(username.clone());
