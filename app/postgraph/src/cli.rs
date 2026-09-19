@@ -145,7 +145,7 @@ pub(crate) enum SmtpCommand
         reset: bool,
     },
 
-    /// Manage SMTP peer allowlist.
+    /// Manage SMTP client allow- and deny-list.
     #[command()]
     Peers {
         #[command(subcommand)]

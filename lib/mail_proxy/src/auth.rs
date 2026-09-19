@@ -164,8 +164,6 @@ mod tests
         let yaml = yaml_serde::to_string(&auth)?;
         let auth: UserAuth = yaml_serde::from_str(&yaml)?;
 
-        println!("YAML:\n{}", yaml);
-
         assert!(auth.verify_user_password("alice", "hunter2").is_ok());
 
         Ok(())
