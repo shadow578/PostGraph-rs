@@ -37,10 +37,9 @@ impl<'de> Deserialize<'de> for IpNetList {
             .into_iter()
             .map(|net| {
                 IpNet::from_str(&net)
+                    .map_err(|err| <D::Error as serde::de::Error>::custom(err.to_string()))
             })
-            .filter(|r| r.is_ok())
-            .flatten()
-            .collect();
+            .collect::<Result<HashSet<IpNet>, D::Error>>()?;
 
         Ok(Self { nets })
     }
