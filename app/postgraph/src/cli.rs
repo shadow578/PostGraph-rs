@@ -312,7 +312,7 @@ impl PeersCommand
         match self {
             PeersCommand::Allow { network } => {
                 if config.smtp.allowed_peers.is_none() {
-                    config.smtp.allowed_peers = Some(IpNetList::new())
+                    config.smtp.allowed_peers = Some(IpNetList::default())
                 }
 
                 config.smtp.allowed_peers.as_mut().unwrap().add(*network);
@@ -321,7 +321,7 @@ impl PeersCommand
             }
             PeersCommand::Deny { network } => {
                 if config.smtp.denied_peers.is_none() {
-                    config.smtp.denied_peers = Some(IpNetList::new())
+                    config.smtp.denied_peers = Some(IpNetList::default())
                 }
 
                 config.smtp.denied_peers.as_mut().unwrap().add(*network);
@@ -346,20 +346,18 @@ impl PeersCommand
                 Self::show(config);
             }
             PeersCommand::Test { ip } => {
-                if let Some(allowlist) = config.smtp.allowed_peers.as_ref() {
-                    if !allowlist.contains(*ip) {
-                        println!("Peer IP '{}' will be rejected because it is not included in the allow list.", ip.to_string());
-                        return;
-                    }
+                if let Some(allowlist) = config.smtp.allowed_peers.as_ref()
+                    && !allowlist.contains(*ip) {
+                    println!("Peer IP '{}' will be rejected because it is not included in the allow list.", ip);
+                    return;
                 }
-                if let Some(denylist) = config.smtp.denied_peers.as_ref() {
-                    if denylist.contains(*ip) {
-                        println!("Peer IP '{}' will be rejected because it is included in the deny list.", ip.to_string());
-                        return;
-                    }
+                if let Some(denylist) = config.smtp.denied_peers.as_ref()
+                    && denylist.contains(*ip) {
+                    println!("Peer IP '{}' will be rejected because it is included in the deny list.", ip);
+                    return;
                 }
 
-                println!("Peer IP '{}' will be accepted.", ip.to_string());
+                println!("Peer IP '{}' will be accepted.", ip);
             }
         }
     }
@@ -371,14 +369,14 @@ impl PeersCommand
             println!();
             println!("Only allow peers in these subnets:");
             for net in allowlist.iter() {
-                println!(" {}", net.to_string());
+                println!(" {}", net);
             }
         }
         if let Some(denylist) = config.smtp.denied_peers.as_ref() {
             println!();
             println!("Deny all peers in these subnets:");
             for net in denylist.iter() {
-                println!(" {}", net.to_string());
+                println!(" {}", net);
             }
         }
     }

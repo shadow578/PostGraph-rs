@@ -47,14 +47,16 @@ impl<'de> Deserialize<'de> for IpNetList {
 }
 // endregion
 
-impl IpNetList
+impl Default for IpNetList
 {
     /// create new IpNetList instance without any networks set.
-    pub fn new() -> Self
-    {
+    fn default() -> Self {
         Self { nets: HashSet::new() }
     }
+}
 
+impl IpNetList
+{
     /// add a new network to the list.
     /// net: IP network to add.
     pub fn add(&mut self, net: IpNet)
@@ -105,7 +107,7 @@ mod tests
     #[test]
     fn test_peer_check() -> anyhow::Result<()>
     {
-        let mut list = IpNetList::new();
+        let mut list = IpNetList::default();
 
         // add allowed nets
         list.add("192.168.1.1/24".parse()?);
@@ -130,7 +132,7 @@ mod tests
     #[test]
     fn test_serialize() -> anyhow::Result<()>
     {
-        let mut list = IpNetList::new();
+        let mut list = IpNetList::default();
 
         list.add("10.10.0.1/32".parse()?);
         assert!(list.contains("10.10.0.1".parse()?));
