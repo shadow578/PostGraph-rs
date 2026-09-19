@@ -2,29 +2,56 @@ use anyhow::anyhow;
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use log::debug;
 use password_hash::PasswordHasher;
+use serde;
+use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
-use std::collections::hash_map::Keys;
 
 #[derive(Debug, Clone)]
 pub struct UserList
 {
-    users: HashMap<String, PasswordHash>,
+    users: HashMap<String, UserEntry>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct UserEntry
+{
+    #[serde(
+        serialize_with = "serialize_password_hash",
+        deserialize_with = "deserialize_password_hash"
+    )]
+    password: PasswordHash,
+}
+
+
 // region: Serialize / Deserialize
+fn serialize_password_hash<S>(
+    value: &PasswordHash,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    value.to_string().serialize(serializer)
+}
+
+fn deserialize_password_hash<'de, D>(
+    deserializer: D,
+) -> Result<PasswordHash, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let hash: String = String::deserialize(deserializer)?;
+    PasswordHash::new(&*hash)
+        .map_err(|e| D::Error::custom(e.to_string()))
+}
+
 impl Serialize for UserList {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let users: HashMap<String, String> = self
-            .users
-            .iter()
-            .map(|(username, hash)| (username.clone(), hash.to_string()))
-            .collect();
-
-        users.serialize(serializer)
+        self.users.serialize(serializer)
     }
 }
 
@@ -33,32 +60,24 @@ impl<'de> Deserialize<'de> for UserList {
     where
         D: Deserializer<'de>,
     {
-        let users: HashMap<String, String> = HashMap::deserialize(deserializer)?;
-        let users = users
-            .into_iter()
-            .map(|(username, hash)| {
-                PasswordHash::new(hash.as_str())
-                    .map(|hash| (username, hash))
-            })
-            .filter(|r| r.is_ok())
-            .flatten()
-            .collect();
-
+        let users: HashMap<String, UserEntry> = HashMap::deserialize(deserializer)?;
         Ok(Self { users })
     }
 }
 // endregion
 
 // region: auth API
-impl UserList
-{
+impl Default for UserList {
     // create a new UserAuth instance without any users configured.
-    pub fn new() -> Self {
+    fn default() -> Self {
         Self {
             users: HashMap::new(),
         }
     }
+}
 
+impl UserList
+{
     /// add or update user entry.
     /// username: username to add or modify.
     /// password: new password to set.
@@ -70,7 +89,7 @@ impl UserList
             .hash_password(password.as_bytes())
             .map_err(|_| anyhow!("could not set password"))?;
 
-        self.users.insert(username.into(), hash);
+        self.users.insert(username.into(), UserEntry { password: hash });
 
         Ok(())
     }
@@ -98,7 +117,7 @@ impl UserList
     }
 
     /// get a list of all users.
-    pub fn list_users(&self) -> Keys<'_, String, PasswordHash>
+    pub fn list_users(&self) -> impl ExactSizeIterator<Item=&String>
     {
         self.users.keys()
     }
@@ -108,7 +127,9 @@ impl UserList
     /// password: clear-text password to validate is correct.
     pub(crate) fn verify_user_password(&self, username: &str, password: &str) -> anyhow::Result<()>
     {
-        let hash = self.users.get(username).ok_or_else(|| anyhow!("user {} not found", username))?;
+        let hash = &self.users.get(username)
+            .ok_or_else(|| anyhow!("user {} not found", username))?
+            .password;
 
         Argon2::default()
             .verify_password(password.as_bytes(), hash)
@@ -128,7 +149,7 @@ mod tests
     #[test]
     fn test_user_auth() -> anyhow::Result<()>
     {
-        let mut auth = UserList::new();
+        let mut auth = UserList::default();
 
         // add two users
         auth.set_user_password("alice", "hunter2")?;
@@ -156,7 +177,7 @@ mod tests
     #[test]
     fn test_user_serialize() -> anyhow::Result<()>
     {
-        let mut auth = UserList::new();
+        let mut auth = UserList::default();
 
         auth.set_user_password("alice", "hunter2")?;
         assert!(auth.verify_user_password("alice", "hunter2").is_ok());

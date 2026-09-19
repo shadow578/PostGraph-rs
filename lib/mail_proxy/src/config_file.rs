@@ -38,7 +38,7 @@ impl ConfigFile
                 allow_insecure_auth: false,
                 tls: None,
                 fail2ban: None,
-                users: UserList::new(),
+                users: UserList::default(),
                 allowed_peers: None,
                 denied_peers: None,
             },
