@@ -345,7 +345,7 @@ impl PeersCommand
                 if let Some(denylist) = config.smtp.denied_peers.as_mut() {
                     denylist.remove(*network);
                     if denylist.is_empty() {
-                        config.smtp.allowed_peers = None;
+                        config.smtp.denied_peers = None;
                     }
                 }
 

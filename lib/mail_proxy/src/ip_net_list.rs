@@ -144,4 +144,23 @@ mod tests
 
         Ok(())
     }
+
+    #[test]
+    fn test_add_remove() -> anyhow::Result<()>
+    {
+        let mut list = IpNetList::default();
+
+        list.add("10.10.0.0/16".parse()?);
+        list.add("10.10.0.0/24".parse()?);
+
+        assert!(list.contains("10.10.0.1".parse()?)); // due to /16 and /24
+        assert!(list.contains("10.10.10.1".parse()?)); // due to /16
+
+        list.remove("10.10.0.0/16".parse()?);
+
+        assert!(list.contains("10.10.0.1".parse()?)); // due to /24
+        assert!(!list.contains("10.10.10.1".parse()?)); // /16 no longer included
+
+        Ok(())
+    }
 }
