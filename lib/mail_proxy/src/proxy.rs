@@ -116,7 +116,7 @@ impl SmtpHandler for ProxyHandler {
                 Ok(_) => {}
                 Err(err) => {
                     debug!("on_mail sender verification for {} failed: {}", username, err);
-                    return Err("User is not allowed for this sender".into());
+                    return Err("Sender is not allowed for this user".into());
                 }
             }
         }
