@@ -248,12 +248,14 @@ impl SmtpCommand
         println!(" Max Failures: {}", max_failures);
         println!(" Ban Duration: {}", format_duration(ban_duration));
 
-        PeersCommand::show(config);
+        if config.smtp.allowed_peers.is_some() || config.smtp.denied_peers.is_some() {
+            println!();
+            PeersCommand::show(config);
+        }
 
         println!();
         print!("TLS Configuration:");
-        if let Some(tls) = &config.smtp.tls
-        {
+        if let Some(tls) = &config.smtp.tls {
             println!();
             println!(" Certificate Chain: ");
             for cert in &tls.certificate_chain {
@@ -303,6 +305,10 @@ pub(crate) enum PeersCommand
         #[clap(value_parser = parse_ip_addr)]
         ip: IpAddr
     },
+
+    /// Show the current peer allow and deny list.
+    #[command()]
+    Show,
 }
 
 impl PeersCommand
@@ -359,24 +365,29 @@ impl PeersCommand
 
                 println!("Peer IP '{}' will be accepted.", ip);
             }
+            PeersCommand::Show => Self::show(config),
         }
     }
 
     pub(crate) fn show(config: &ConfigFile)
     {
-        // only print allow / deny list if configured
+        let mut printed_allowlist = false;
         if let Some(allowlist) = config.smtp.allowed_peers.as_ref() {
-            println!();
+            printed_allowlist = true;
             println!("Only allow peers in these subnets:");
             for net in allowlist.iter() {
-                println!(" {}", net);
+                println!(" - {}", net);
             }
         }
+
         if let Some(denylist) = config.smtp.denied_peers.as_ref() {
-            println!();
+            if printed_allowlist {
+                println!()
+            }
+
             println!("Deny all peers in these subnets:");
             for net in denylist.iter() {
-                println!(" {}", net);
+                println!(" - {}", net);
             }
         }
     }
