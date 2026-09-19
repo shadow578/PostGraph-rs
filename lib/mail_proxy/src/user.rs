@@ -5,22 +5,34 @@ use password_hash::PasswordHasher;
 use serde;
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
 pub struct UserList
 {
+    /// list of configured users.
     users: HashMap<String, UserEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct UserEntry
 {
+    /// password hash of this user.
     #[serde(
         serialize_with = "serialize_password_hash",
         deserialize_with = "deserialize_password_hash"
     )]
     password: PasswordHash,
+
+    /// list of mail addresses this user may send as.
+    /// the user may always send using a mail address matching their username.
+    /// this list may contain exact entries (alice@example.com) or whole domains entries (*@example.com).
+    #[serde(
+        rename = "send_as",
+        skip_serializing_if = "HashSet::is_empty",
+        default
+    )]
+    allow_send_as: HashSet<String>,
 }
 
 
@@ -89,7 +101,7 @@ impl UserList
             .hash_password(password.as_bytes())
             .map_err(|_| anyhow!("could not set password"))?;
 
-        self.users.insert(username.into(), UserEntry { password: hash });
+        self.users.insert(username.into(), UserEntry { password: hash, allow_send_as: HashSet::new() });
 
         Ok(())
     }
@@ -136,6 +148,82 @@ impl UserList
             .map_err(|_| anyhow!("invalid password"))?;
 
         Ok(())
+    }
+
+    /// Add an entry to a users allowed senders list.
+    /// username: username to update.
+    /// sender: sender address to add to allowed sender list.
+    pub fn add_user_send_as(&mut self, username: &str, sender: &str) -> anyhow::Result<()>
+    {
+        debug!("Adding allowed sender {} for {}", sender, username);
+
+        self.users.get_mut(username)
+            .ok_or_else(|| anyhow!("user {} not found", username))?
+            .allow_send_as
+            .insert(sender.into());
+
+        Ok(())
+    }
+
+    /// Remove an entry from a users allowed senders list.
+    /// username: username to update.
+    /// sender: sender address to add to allowed sender list.
+    pub fn remove_user_send_as(&mut self, username: &str, sender: &str) -> anyhow::Result<()>
+    {
+        debug!("Removing allowed sender {} for {}", sender, username);
+
+        self.users.get_mut(username)
+            .ok_or_else(|| anyhow!("user {} not found", username))?
+            .allow_send_as
+            .remove::<String>(&sender.into());
+
+        Ok(())
+    }
+
+    /// List all entries in a users  allowed senders list.
+    /// username: username to list for.
+    pub fn list_user_send_as(&self, username: &str) -> anyhow::Result<impl ExactSizeIterator<Item=&String>>
+    {
+        Ok(
+            self.users.get(username)
+                .ok_or_else(|| anyhow!("user {} not found", username))?
+                .allow_send_as
+                .iter()
+        )
+    }
+
+    /// verify user is allowed to send using the given address.
+    /// username: username to match to.
+    /// sender: sender address to check.
+    pub(crate) fn verify_user_can_send_as(&self, username: &str, sender: &str) -> anyhow::Result<()>
+    {
+        let sender = sender.to_lowercase();
+
+        // check for username match
+        if sender == username.to_lowercase() {
+            return Ok(());
+        }
+
+        // check allow_send_as
+        let user = &self.users.get(username)
+            .ok_or_else(|| anyhow!("user {} not found", username))?;
+
+        for entry in &user.allow_send_as {
+            let entry = entry.to_lowercase();
+
+            // domain match
+            if let Some(domain) = entry.strip_prefix("*@") {
+                if sender.ends_with(domain) {
+                    return Ok(());
+                }
+            }
+            // exact match
+            else if entry == sender {
+                return Ok(());
+            }
+        }
+
+        anyhow::bail!("user {} not allowed to send as {}", username, sender);
     }
 }
 // endregion
@@ -186,6 +274,48 @@ mod tests
         let auth: UserList = yaml_serde::from_str(&yaml)?;
 
         assert!(auth.verify_user_password("alice", "hunter2").is_ok());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_check_send_as() -> anyhow::Result<()>
+    {
+        let mut auth = UserList::default();
+
+        auth.set_user_password("alice@example.com", "hunter2")?;
+        auth.add_user_send_as("alice@example.com", "bob@example.com")?;
+
+        assert!(auth.verify_user_can_send_as("alice@example.com", "alice@example.com").is_ok());
+        assert!(auth.verify_user_can_send_as("alice@example.com", "bob@example.com").is_ok());
+        assert!(auth.verify_user_can_send_as("alice@example.com", "eve@example.com").is_err());
+
+        // don't case about case
+        assert!(auth.verify_user_can_send_as("alice@example.com", "ALICE@Example.com").is_ok());
+        assert!(auth.verify_user_can_send_as("alice@example.com", "BOB@example.com").is_ok());
+
+        auth.remove_user_send_as("alice@example.com", "bob@example.com")?;
+
+        assert!(auth.verify_user_can_send_as("alice@example.com", "bob@example.com").is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_check_send_as_domain() -> anyhow::Result<()>
+    {
+        let mut auth = UserList::default();
+
+        auth.set_user_password("alice@example.com", "hunter2")?;
+        auth.add_user_send_as("alice@example.com", "*@example.com")?;
+
+        assert!(auth.verify_user_can_send_as("alice@example.com", "alice@example.com").is_ok());
+        assert!(auth.verify_user_can_send_as("alice@example.com", "bob@example.com").is_ok());
+        assert!(auth.verify_user_can_send_as("alice@example.com", "eve@example.com").is_ok());
+        assert!(auth.verify_user_can_send_as("alice@example.com", "eve@example.org").is_err());
+
+        // don't care about case
+        assert!(auth.verify_user_can_send_as("alice@example.com", "BOB@Example.com").is_ok());
 
         Ok(())
     }

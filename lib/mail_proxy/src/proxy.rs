@@ -110,8 +110,15 @@ impl SmtpHandler for ProxyHandler {
     async fn on_mail(&mut self, mail: &Mail) -> Result<(), Box<dyn Error + Send + Sync>> {
         let sender = mail.sender();
 
-        if let Some(username) = self.username.as_ref() && username != sender {
-            return Err("Sender address must match username!".into());
+        if let Some(username) = self.username.as_ref() {
+            match self.config.smtp.users.verify_user_can_send_as(username, sender)
+            {
+                Ok(_) => {}
+                Err(err) => {
+                    debug!("on_mail sender verification for {} failed: {}", username, err);
+                    return Err("User is not allowed for this sender".into());
+                }
+            }
         }
 
         self.productive = true;

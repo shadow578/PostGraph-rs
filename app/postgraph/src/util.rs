@@ -17,12 +17,23 @@ pub(crate) fn existing_file(path: &str) -> Result<String, String> {
     }
 }
 
+// CLAP validator that validates string looks like a e-mail address.
+pub(crate) fn mail_address_string(address: &str) -> Result<String, String> {
+    let address = address.trim();
+    if address.contains("@") {
+        Ok(address.into())
+    } else {
+        Err(format!("'{}' is not a mail address", address))
+    }
+}
+
+
 // CLAP validator that parses validates an IpAddr.
 pub(crate) fn parse_ip_addr(net: &str) -> Result<IpAddr, String> {
     if let Ok(ip) = IpAddr::from_str(net) {
         Ok(ip)
     } else {
-        Err(format!("'{}' is not a valid IP address.", net))
+        Err(format!("'{}' is not a valid IP address", net))
     }
 }
 
@@ -31,7 +42,7 @@ pub(crate) fn parse_ip_net(net: &str) -> Result<IpNet, String> {
     if let Ok(net) = IpNet::from_str(net) {
         Ok(net)
     } else {
-        Err(format!("'{}' is not a valid IP network in CIDR notation.", net))
+        Err(format!("'{}' is not a valid IP network in CIDR notation", net))
     }
 }
 
