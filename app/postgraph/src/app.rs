@@ -23,10 +23,9 @@ pub(crate) async fn run_mail_proxy(cli: &Cli) -> Result<()> {
 /// cli: parsed cli args. requires `cli.command == CliCommand::Config`.
 pub(crate) async fn run_config_cli(cli: &Cli) -> Result<()> {
     let mut config = ConfigFile::from_file(&cli.config).await
-        .unwrap_or_else(|err| {
-            eprintln!("Failed to load configuration file, restoring default: {}", err);
-            ConfigFile::empty()
-        });
+        .map_err(|err| {
+            anyhow!("Failed to load configuration file: {}", err)
+        })?;
 
     if let Some(CliCommand::Config { command }) = cli.command.as_ref() {
         command.execute(&mut config).await;
