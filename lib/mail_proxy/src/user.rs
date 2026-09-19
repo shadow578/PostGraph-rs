@@ -223,7 +223,9 @@ impl UserList
 
             // domain match
             if let Some(domain) = entry.strip_prefix("*@")
-                && sender.ends_with(domain) {
+                && !domain.is_empty()
+                && sender.rsplit_once('@')
+                .is_some_and(|(_, sender_domain)| sender_domain == domain) {
                 return Ok(());
             }
 
