@@ -1,4 +1,7 @@
-use crate::util::{existing_file, mask_string, parse_ip_addr, parse_ip_net, prompt_user_confirmation};
+use crate::util::{
+    existing_file, mail_address_string, mask_string, parse_ip_addr, parse_ip_net,
+    prompt_user_confirmation,
+};
 use base64::Engine;
 use clap::{ArgGroup, Parser};
 use humantime::{format_duration, parse_duration};
@@ -10,13 +13,12 @@ use ms_graph::{API_MAX_MESSAGE_SIZE, RECOMMENDED_MAX_MESSAGE_SIZE};
 use std::net::IpAddr;
 use std::time::Duration;
 
-/// PostGraph: A SMTP to Microsoft Graph API mail proxy, developed by Chris.
+/// PostGraph is an SMTP-to-Microsoft Graph mail proxy developed by Chris.
 /// This tool is licensed under the GNU General Public License v3.0.
-/// For more information, refer to https://github.com/shadow578/PostGraph-rs.
+/// For more information, see https://github.com/shadow578/PostGraph-rs.
 #[derive(Parser, Debug)]
-pub(crate) struct Cli
-{
-    /// Path to the configuration file.
+pub(crate) struct Cli {
+    /// Path to the PostGraph configuration file.
     #[arg(short, long, default_value = "config.yaml")]
     pub(crate) config: String,
 
@@ -25,54 +27,49 @@ pub(crate) struct Cli
 }
 
 #[derive(Parser, Debug)]
-pub(crate) enum CliCommand
-{
-    /// Run PostGraph.
-    Run
-    {
+pub(crate) enum CliCommand {
+    /// Run the PostGraph SMTP proxy.
+    Run {
         /// Run PostGraph as a Windows service.
-        /// Please note that in this mode, you must provide the absolute config path via '--config'.
+        /// In this mode, you must provide the absolute config path via --config.
         #[cfg(windows)]
         #[clap(short, long)]
-        service: bool
+        service: bool,
     },
 
-    /// Update the configuration.
+    /// Manage PostGraph configuration.
     Config {
         #[clap(subcommand)]
-        command: ConfigCommand
+        command: ConfigCommand,
     },
 }
 
 #[derive(Parser, Debug)]
-pub(crate) enum ConfigCommand
-{
-    /// Manage SMTP server.
+pub(crate) enum ConfigCommand {
+    /// Manage SMTP server settings.
     Smtp {
         #[command(subcommand)]
-        command: SmtpCommand
+        command: SmtpCommand,
     },
 
-    /// Manage Microsoft Graph API client.
+    /// Manage Microsoft Graph client settings.
     Graph {
         #[command(subcommand)]
-        command: GraphCommand
+        command: GraphCommand,
     },
 
-    /// Manage authentication configuration.
+    /// Manage authentication settings.
     Auth {
         #[command(subcommand)]
-        command: AuthCommand
+        command: AuthCommand,
     },
 
-    /// Restore default configuration.
+    /// Restore the default configuration.
     Reset,
 }
 
-impl ConfigCommand
-{
-    pub(crate) async fn execute(&self, config: &mut ConfigFile)
-    {
+impl ConfigCommand {
+    pub(crate) async fn execute(&self, config: &mut ConfigFile) {
         match self {
             ConfigCommand::Smtp { command } => command.execute(config).await,
             ConfigCommand::Graph { command } => command.execute(config).await,
@@ -85,20 +82,21 @@ impl ConfigCommand
         }
 
         // disable insecure auth when not needed
-        if config.smtp.allow_insecure_auth && (config.smtp.tls.is_some() || !config.smtp.auth.has_users()) {
+        if config.smtp.allow_insecure_auth
+            && (config.smtp.tls.is_some() || !config.smtp.users.has_users())
+        {
             config.smtp.allow_insecure_auth = false;
         }
     }
 }
 
 #[derive(Parser, Debug)]
-pub(crate) enum SmtpCommand
-{
-    /// Show current SMTP server configuration.
+pub(crate) enum SmtpCommand {
+    /// Display the current SMTP server configuration.
     #[command()]
     Show,
 
-    /// Setup SMTP server.
+    /// Configure the SMTP server.
     #[command(group(
         ArgGroup::new("setup")
             .required(true)
@@ -114,12 +112,12 @@ pub(crate) enum SmtpCommand
         #[arg(short, long)]
         name: Option<String>,
 
-        /// Maximum E-Mail message size, in bytes.
+        /// Maximum message size in bytes.
         #[arg(short, long)]
         max_message_size: Option<usize>,
     },
 
-    /// Setup fail2ban for SMTP server.
+    /// Configure the SMTP fail2ban policy.
     #[command(name = "fail2ban",
         group(
         ArgGroup::new("update")
@@ -128,46 +126,48 @@ pub(crate) enum SmtpCommand
             .args(["connections", "failures", "duration", "reset"])
         ))]
     Fail2Ban {
-        /// Maximum number of connections a client is allowed to hold.
+        /// Maximum number of simultaneous connections allowed per client.
         #[arg(short, long)]
         connections: Option<u32>,
 
-        /// Maximum number of suspicious / failed sessions before a client's IP is banned.
+        /// Number of suspicious or failed sessions before a client IP is banned.
         #[arg(short, long)]
         failures: Option<u32>,
 
-        /// For how long a client's IP remains banned.
+        /// How long a client IP remains banned.
         #[arg(short, long, value_parser = parse_duration)]
         duration: Option<Duration>,
 
-        /// Reset to default settings.
+        /// Reset the fail2ban configuration to its defaults.
         #[arg(long)]
         reset: bool,
     },
 
-    /// Manage SMTP client allow- and deny-list.
+    /// Manage SMTP peer allow/deny lists.
     #[command()]
     Peers {
         #[command(subcommand)]
-        command: PeersCommand
+        command: PeersCommand,
     },
 
-    /// Manage SMTP server TLS configuration.
+    /// Manage SMTP TLS settings.
     #[command()]
     Tls {
         #[command(subcommand)]
-        command: TlsCommand
+        command: TlsCommand,
     },
 }
-impl SmtpCommand
-{
-    pub(crate) async fn execute(&self, config: &mut ConfigFile)
-    {
+impl SmtpCommand {
+    async fn execute(&self, config: &mut ConfigFile) {
         match self {
             SmtpCommand::Show => {
                 Self::show(config);
             }
-            SmtpCommand::Setup { address, name, max_message_size } => {
+            SmtpCommand::Setup {
+                address,
+                name,
+                max_message_size,
+            } => {
                 if let Some(address) = address {
                     config.smtp.address = address.into();
                 }
@@ -186,12 +186,24 @@ impl SmtpCommand
 
                 Self::show(config);
             }
-            SmtpCommand::Fail2Ban { connections, failures, duration, reset } => {
+            SmtpCommand::Fail2Ban {
+                connections,
+                failures,
+                duration,
+                reset,
+            } => {
                 config.smtp.fail2ban = if *reset {
                     None
                 } else {
-                    let mut fail2ban =
-                        if let Some(fail2ban) = config.smtp.fail2ban.clone() { fail2ban } else { Fail2BanConfig { max_connections: None, max_failures: None, ban_duration: None } };
+                    let mut fail2ban = if let Some(fail2ban) = config.smtp.fail2ban.clone() {
+                        fail2ban
+                    } else {
+                        Fail2BanConfig {
+                            max_connections: None,
+                            max_failures: None,
+                            ban_duration: None,
+                        }
+                    };
 
                     if let Some(connections) = connections {
                         fail2ban.max_connections = Some(*connections);
@@ -220,20 +232,24 @@ impl SmtpCommand
         }
     }
 
-    fn show(config: &ConfigFile)
-    {
+    fn show(config: &ConfigFile) {
         println!("SMTP Server Configuration:");
-        println!(" Listen Address: {}", config.smtp.address);
-        println!(" Server Name: {}", config.smtp.name.clone().unwrap_or("N/A".into()));
+        println!("  Listen Address: {}", config.smtp.address);
+        println!(
+            "  Server Name: {}",
+            config.smtp.name.clone().unwrap_or("N/A".into())
+        );
 
-        print!(" Maximum Message Size: ");
+        print!("  Maximum Message Size: ");
         if let Some(max_message_size) = config.smtp.max_message_size {
             print!("{} bytes", max_message_size);
 
             if max_message_size > API_MAX_MESSAGE_SIZE {
-                println!(" (above maximum of {API_MAX_MESSAGE_SIZE} bytes the Graph API can reliably handle)")
+                println!(
+                    " (above the maximum of {API_MAX_MESSAGE_SIZE} bytes the Graph API can reliably handle)"
+                )
             } else if max_message_size > RECOMMENDED_MAX_MESSAGE_SIZE {
-                println!(" (above recommended maximum of {RECOMMENDED_MAX_MESSAGE_SIZE} bytes)")
+                println!(" (above the recommended maximum of {RECOMMENDED_MAX_MESSAGE_SIZE} bytes)")
             } else {
                 println!();
             }
@@ -241,12 +257,13 @@ impl SmtpCommand
             println!("Automatic");
         }
 
-        let (max_connections, max_failures, ban_duration) = config.smtp.get_effective_fail2ban_config();
+        let (max_connections, max_failures, ban_duration) =
+            config.smtp.get_effective_fail2ban_config();
         println!();
         println!("Fail2Ban Configuration:");
-        println!(" Maximum Connections: {}", max_connections);
-        println!(" Max Failures: {}", max_failures);
-        println!(" Ban Duration: {}", format_duration(ban_duration));
+        println!("  Maximum Connections: {}", max_connections);
+        println!("  Maximum Failures: {}", max_failures);
+        println!("  Ban Duration: {}", format_duration(ban_duration));
 
         if config.smtp.allowed_peers.is_some() || config.smtp.denied_peers.is_some() {
             println!();
@@ -257,14 +274,14 @@ impl SmtpCommand
         print!("TLS Configuration:");
         if let Some(tls) = &config.smtp.tls {
             println!();
-            println!(" Certificate Chain: ");
+            println!("  Certificate Chain:");
             for cert in &tls.certificate_chain {
-                println!("   {}", cert);
+                println!("    {}", cert);
             }
 
-            println!(" Private Key: {}", tls.private_key);
+            println!("  Private Key: {}", tls.private_key);
         } else {
-            println!(" N/A");
+            println!("  N/A");
         }
 
         show_insecure_auth_warning(config);
@@ -272,49 +289,46 @@ impl SmtpCommand
 }
 
 #[derive(Parser, Debug)]
-pub(crate) enum PeersCommand
-{
-    /// Add an IP subnet to the allow list.
+pub(crate) enum PeersCommand {
+    /// Add a subnet to the allow list.
     #[command()]
     Allow {
         /// The IP network to add.
         #[clap(value_parser = parse_ip_net)]
-        network: IpNet
+        network: IpNet,
     },
 
-    /// Add an IP subnet to the deny list.
+    /// Add a subnet to the deny list.
     #[command()]
     Deny {
         /// The IP network to add.
         #[clap(value_parser = parse_ip_net)]
-        network: IpNet
+        network: IpNet,
     },
 
-    /// Remove an IP network from *both* the allow and deny list.
+    /// Remove a subnet from both the allow and deny lists.
     #[command()]
     Remove {
         /// The IP network to remove.
         #[clap(value_parser = parse_ip_net)]
-        network: IpNet
+        network: IpNet,
     },
 
-    /// Test if an IP address matches against the allow and deny list.
+    /// Check whether an IP address matches the allow and deny rules.
     #[command()]
     Test {
-        /// The IP to test.
+        /// The IP address to test.
         #[clap(value_parser = parse_ip_addr)]
-        ip: IpAddr
+        ip: IpAddr,
     },
 
-    /// Show the current peer allow and deny list.
+    /// Display the current peer allow/deny lists.
     #[command()]
     Show,
 }
 
-impl PeersCommand
-{
-    pub(crate) async fn execute(&self, config: &mut ConfigFile)
-    {
+impl PeersCommand {
+    async fn execute(&self, config: &mut ConfigFile) {
         match self {
             PeersCommand::Allow { network } => {
                 if config.smtp.allowed_peers.is_none() {
@@ -353,13 +367,21 @@ impl PeersCommand
             }
             PeersCommand::Test { ip } => {
                 if let Some(allowlist) = config.smtp.allowed_peers.as_ref()
-                    && !allowlist.contains(*ip) {
-                    println!("Peer IP '{}' will be rejected because it is not included in the allow list.", ip);
+                    && !allowlist.contains(*ip)
+                {
+                    println!(
+                        "Peer IP '{}' will be rejected because it is not included in the allow list.",
+                        ip
+                    );
                     return;
                 }
                 if let Some(denylist) = config.smtp.denied_peers.as_ref()
-                    && denylist.contains(*ip) {
-                    println!("Peer IP '{}' will be rejected because it is included in the deny list.", ip);
+                    && denylist.contains(*ip)
+                {
+                    println!(
+                        "Peer IP '{}' will be rejected because it is included in the deny list.",
+                        ip
+                    );
                     return;
                 }
 
@@ -369,14 +391,13 @@ impl PeersCommand
         }
     }
 
-    pub(crate) fn show(config: &ConfigFile)
-    {
+    pub(crate) fn show(config: &ConfigFile) {
         let mut printed_allowlist = false;
         if let Some(allowlist) = config.smtp.allowed_peers.as_ref() {
             printed_allowlist = true;
-            println!("Only allow peers in these subnets:");
+            println!("Allow peers only from these subnets:");
             for net in allowlist.iter() {
-                println!(" - {}", net);
+                println!("  - {}", net);
             }
         }
 
@@ -385,41 +406,41 @@ impl PeersCommand
                 println!()
             }
 
-            println!("Deny all peers in these subnets:");
+            println!("Deny peers in these subnets:");
             for net in denylist.iter() {
-                println!(" - {}", net);
+                println!("  - {}", net);
             }
         }
     }
 }
 
 #[derive(Parser, Debug)]
-pub(crate) enum TlsCommand
-{
-    /// Setup TLS.
+pub(crate) enum TlsCommand {
+    /// Configure TLS for the SMTP server.
     #[command()]
     Setup {
-        /// Path to certificate(s) for certificate chain, most concrete listed first.
-        /// For a self-signed certificate, you'll only need one.
+        /// Path to the certificate chain, with the most specific certificate first.
+        /// For a self-signed certificate, only one file is required.
         #[arg(short, long, value_parser = existing_file)]
         certificate: Vec<String>,
 
-        /// Private key for TLS certificate.
+        /// Path to the private key matching the certificate.
         #[arg(short, long, value_parser = existing_file)]
         private_key: String,
     },
 
-    /// Disable TLS.
+    /// Disable TLS for the SMTP server.
     #[command()]
     Disable,
 }
 
-impl TlsCommand
-{
-    pub(crate) async fn execute(&self, config: &mut ConfigFile)
-    {
+impl TlsCommand {
+    async fn execute(&self, config: &mut ConfigFile) {
         match self {
-            TlsCommand::Setup { certificate, private_key } => {
+            TlsCommand::Setup {
+                certificate,
+                private_key,
+            } => {
                 config.smtp.tls = Some(TLSConfig {
                     certificate_chain: certificate.clone(),
                     private_key: private_key.clone(),
@@ -433,13 +454,12 @@ impl TlsCommand
 }
 
 #[derive(Parser, Debug)]
-pub(crate) enum GraphCommand
-{
-    /// Show current Microsoft Graph API configuration.
+pub(crate) enum GraphCommand {
+    /// Display the current Microsoft Graph configuration.
     #[command()]
     Show,
 
-    /// Setup Microsoft Graph API configuration.
+    /// Configure the Microsoft Graph client.
     #[command(group(
         ArgGroup::new("setup")
             .required(true)
@@ -447,33 +467,35 @@ pub(crate) enum GraphCommand
             .args(["tenant_id", "client_id", "client_secret"])
     ))]
     Setup {
-        /// ID of the Microsoft Entra tenant the application is registered in.
+        /// ID of the Microsoft Entra tenant where the application is registered.
         #[arg(long)]
         tenant_id: Option<String>,
 
-        /// ID of the Microsoft Entra app / client registration.
+        /// ID of the Microsoft Entra application or client registration.
         #[arg(long)]
         client_id: Option<String>,
 
-        /// Client secret used for authentication against Microsoft Graph API.
+        /// Client secret used to authenticate against Microsoft Graph.
         #[arg(long)]
         client_secret: Option<String>,
     },
 
-    /// Test connection to Microsoft Graph API.
+    /// Test connectivity to Microsoft Graph.
     #[command()]
     Test,
 }
 
-impl GraphCommand
-{
-    pub(crate) async fn execute(&self, config: &mut ConfigFile)
-    {
+impl GraphCommand {
+    async fn execute(&self, config: &mut ConfigFile) {
         match self {
             GraphCommand::Show => {
                 Self::show(config);
             }
-            GraphCommand::Setup { tenant_id, client_id, client_secret } => {
+            GraphCommand::Setup {
+                tenant_id,
+                client_id,
+                client_secret,
+            } => {
                 if let Some(tenant_id) = tenant_id {
                     config.graph.tenant_id = tenant_id.into();
                 }
@@ -496,23 +518,23 @@ impl GraphCommand
         }
     }
 
-    fn show(config: &ConfigFile)
-    {
+    fn show(config: &ConfigFile) {
         println!("Microsoft Graph API Configuration:");
         println!(" Tenant ID: {}", mask_string(&config.graph.tenant_id, 6));
         println!(" Client ID: {}", mask_string(&config.graph.client_id, 6));
-        println!(" Client Secret: {}", mask_string(&config.graph.client_secret, 6));
+        println!(
+            " Client Secret: {}",
+            mask_string(&config.graph.client_secret, 6)
+        );
     }
 
-    async fn test(config: &ConfigFile)
-    {
+    async fn test(config: &ConfigFile) {
         println!("Testing connection to Microsoft Graph API...");
 
         let graph_config = config.graph.clone().into_client_config();
         let mut client = GraphClient::new(graph_config);
 
-        match client.authenticate().await
-        {
+        match client.authenticate().await {
             Ok(_) => {
                 println!("Connected to Microsoft Graph successfully");
             }
@@ -524,89 +546,96 @@ impl GraphCommand
 }
 
 #[derive(Parser, Debug)]
-pub(crate) enum AuthCommand
-{
+pub(crate) enum AuthCommand {
     /// Manage users.
+    #[command()]
     User {
+        username: String,
+
         #[command(subcommand)]
-        command: UserCommand
+        command: UserCommand,
     },
+
+    /// Show all currently configured users.
+    #[command()]
+    ShowUsers,
 
     /// Allow authentication over insecure connections.
     #[command()]
     AllowInsecureAuth {
         #[command(subcommand)]
-        command: AllowInsecureAuthCommand
+        command: AllowInsecureAuthCommand,
     },
 }
 
-impl AuthCommand
-{
-    pub(crate) async fn execute(&self, config: &mut ConfigFile)
-    {
+impl AuthCommand {
+    async fn execute(&self, config: &mut ConfigFile) {
         match self {
-            AuthCommand::User { command } => command.execute(config).await,
+            AuthCommand::User { username, command } => command.execute(config, username).await,
+            AuthCommand::ShowUsers => {
+                let users = config.smtp.users.list_users();
+
+                println!("Listing {} Users:", users.len());
+                for user in users {
+                    println!(" {}", user);
+                }
+
+                show_insecure_auth_warning(config);
+            }
             AuthCommand::AllowInsecureAuth { command } => command.execute(config).await,
         }
     }
 }
 
 #[derive(Parser, Debug)]
-pub(crate) enum UserCommand
-{
-    /// Show all currently configured users.
-    #[command()]
-    Show,
-
-    /// Add or modify a user.
-    #[command(visible_alias = "modify")]
-    Add {
-        /// Username to add. Must match Microsoft Entra User UPN.
-        username: String,
-
+pub(crate) enum UserCommand {
+    /// Set the password of a user.
+    /// If the user does not exist, this will create a new user.
+    #[command(visible_alias = "passwd")]
+    SetPassword {
         /// Password for authentication against mail proxy.
+        /// If not provided, a password will be generated.
         password: Option<String>,
 
-        /// Force accept the username, even if it is likely invalid.
+        /// Force accept the username.
         #[arg(long)]
         force: bool,
     },
 
     /// Remove an existing user.
     #[command()]
-    Remove {
-        /// Username to remove.
-        username: String,
+    Remove,
+
+    /// Manage allowed senders for an existing user.
+    #[command()]
+    Senders {
+        #[command(subcommand)]
+        command: UserSendAsCommand,
     },
 }
 
-impl UserCommand
-{
-    pub(crate) async fn execute(&self, config: &mut ConfigFile)
-    {
+impl UserCommand {
+    async fn execute(&self, config: &mut ConfigFile, username: &str) {
         match self {
-            UserCommand::Show => {
-                Self::show(config);
-            }
-            UserCommand::Add { username, password, force } => {
-                println!("{} user {}",
-                         if config.smtp.auth.has_user(username) { "Updating" } else { "Adding" },
-                         username
-                );
-
-                if !username.contains("@")
-                {
+            UserCommand::SetPassword { password, force } => {
+                let is_new = !config.smtp.users.has_user(username);
+                if is_new && !username.contains("@") {
                     println!("Username does not look like a Microsoft 365 username.");
-                    println!("Please note that the username *must* match the username in M365.");
+                    println!("It is recommended that the username matches the one in M365.");
+                    println!("To force this username, use the '--force' option.");
 
-                    if !force
-                    {
+                    if !force {
                         return;
                     }
                 }
 
-                let password = match password
-                {
+                println!(
+                    "{} user {}",
+                    if is_new { "Adding" } else { "Updating" },
+                    username
+                );
+
+                let password = match password {
                     Some(password) => password.into(),
                     None => {
                         // auto-generate a password
@@ -620,38 +649,85 @@ impl UserCommand
                     }
                 };
 
-                if let Err(err) = config.smtp.auth.set_user_password(username, &password)
-                {
+                if let Err(err) = config.smtp.users.set_user_password(username, &password) {
                     eprintln!("Failed to update user: {}", err);
                 }
-
-                println!();
-                Self::show(config);
             }
-            UserCommand::Remove { username } => {
+            UserCommand::Remove => {
                 println!("Removing user {}", username);
-                if let Err(err) = config.smtp.auth.remove_user(username)
-                {
+                if let Err(err) = config.smtp.users.remove_user(username) {
                     eprintln!("Failed to remove user: {}", err);
                 }
-
-                println!();
-                Self::show(config);
             }
+            UserCommand::Senders { command } => command.execute(config, username).await,
         }
     }
+}
 
-    fn show(config: &ConfigFile)
-    {
-        let users = config.smtp.auth.list_users();
+#[derive(Parser, Debug)]
+pub(crate) enum UserSendAsCommand {
+    /// Add an allowed sender for a user.
+    #[command()]
+    Add {
+        /// E-mail address that the user is allowed to send as.
+        /// This may be an exact address, a whole-domain pattern like '*@example.com',
+        /// or any address using '*@*'.
+        #[arg(value_parser = mail_address_string)]
+        sender: String,
+    },
 
-        println!("Listing {} Users:", users.len());
-        for user in users
-        {
-            println!(" {}", user);
+    /// Remove an allowed sender from a user.
+    #[command()]
+    Remove {
+        /// E-mail address to remove from the user's allowed senders.
+        /// This may be an exact address, a whole-domain pattern like '*@example.com',
+        /// or any address using '*@*'.
+        #[arg(value_parser = mail_address_string)]
+        sender: String,
+    },
+
+    /// Display the allowed senders for a user.
+    #[command()]
+    Show,
+}
+
+impl UserSendAsCommand {
+    async fn execute(&self, config: &mut ConfigFile, username: &str) {
+        match self {
+            UserSendAsCommand::Add { sender } => {
+                println!("Adding allowed sender '{}' for user '{}'", sender, username);
+                if let Err(err) = config.smtp.users.add_user_send_as(username, sender) {
+                    eprintln!("Failed to update user: {}", err);
+                }
+            }
+            UserSendAsCommand::Remove { sender } => {
+                println!(
+                    "Removing allowed sender '{}' for user '{}'",
+                    sender, username
+                );
+                if let Err(err) = config.smtp.users.remove_user_send_as(username, sender) {
+                    eprintln!("Failed to update user: {}", err);
+                }
+            }
+            UserSendAsCommand::Show => {
+                if !config.smtp.users.has_user(username) {
+                    eprintln!("User '{}' does not exist", username);
+                    return;
+                }
+
+                println!("User '{}' is allowed to send as:", username);
+
+                // username is implicitly included in senders
+                println!(" - {}", username);
+
+                if let Ok(senders) = config.smtp.users.list_user_send_as(username)
+                {
+                    for sender in senders {
+                        println!(" - {}", sender);
+                    }
+                }
+            }
         }
-
-        show_insecure_auth_warning(config);
     }
 }
 
@@ -664,19 +740,23 @@ pub(crate) enum AllowInsecureAuthCommand {
     No,
 }
 
-impl AllowInsecureAuthCommand
-{
-    pub(crate) async fn execute(&self, config: &mut ConfigFile)
-    {
+impl AllowInsecureAuthCommand {
+    async fn execute(&self, config: &mut ConfigFile) {
         if config.smtp.tls.is_some() {
-            println!("Cannot enable insecure authentication, secure authentication via TLS is available in your configuration.");
+            println!(
+                "Cannot enable insecure authentication, secure authentication via TLS is available in your configuration."
+            );
             return;
         }
 
         match self {
             AllowInsecureAuthCommand::Yes => {
-                println!("WARNING: You're about to allow authentication over unsecure, plain-text connections.");
-                println!("In this configuration, credentials are sent in plain-text, potentially allowing credential theft.");
+                println!(
+                    "WARNING: You're about to allow authentication over unsecure, plain-text connections."
+                );
+                println!(
+                    "In this configuration, credentials are sent in plain-text, potentially allowing credential theft."
+                );
                 println!("This configuration is NOT recommended.");
 
                 if prompt_user_confirmation("yes, i understand").is_ok() {
@@ -693,17 +773,20 @@ impl AllowInsecureAuthCommand
     }
 }
 
-fn show_insecure_auth_warning(config: &ConfigFile)
-{
-    if config.smtp.tls.is_none() && config.smtp.auth.has_users() {
+fn show_insecure_auth_warning(config: &ConfigFile) {
+    if config.smtp.tls.is_none() && config.smtp.users.has_users() {
         println!();
         println!("WARNING: You've configured user authentication, but have not configured TLS.");
 
         if config.smtp.allow_insecure_auth {
-            println!("In this configuration, credentials are sent in plain-text, potentially allowing credential theft.");
+            println!(
+                "In this configuration, credentials are sent in plain-text, potentially allowing credential theft."
+            );
         } else {
             println!("Authentication is currently not enabled.");
-            println!("If you wish to enable authentication anyway, run 'postgraph config auth allow-insecure-auth yes'")
+            println!(
+                "If you wish to enable authentication anyway, run 'postgraph config auth allow-insecure-auth yes'"
+            )
         }
     }
 }
