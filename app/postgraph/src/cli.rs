@@ -670,6 +670,8 @@ pub(crate) enum UserSendAsCommand {
     #[command()]
     Add {
         /// E-mail address that the user is allowed to send as.
+        /// This may be an exact address, a whole-domain pattern like '*@example.com',
+        /// or any address using '*@*'.
         #[arg(value_parser = mail_address_string)]
         sender: String,
     },
@@ -678,6 +680,8 @@ pub(crate) enum UserSendAsCommand {
     #[command()]
     Remove {
         /// E-mail address to remove from the user's allowed senders.
+        /// This may be an exact address, a whole-domain pattern like '*@example.com',
+        /// or any address using '*@*'.
         #[arg(value_parser = mail_address_string)]
         sender: String,
     },

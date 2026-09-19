@@ -201,14 +201,19 @@ impl UserList
         for entry in &user.allow_send_as {
             let entry = entry.to_lowercase();
 
-            // domain match
-            if let Some(domain) = entry.strip_prefix("*@") {
-                if sender.ends_with(domain) {
-                    return Ok(());
-                }
+            // any match
+            if entry == "*@*" {
+                return Ok(());
             }
+
+            // domain match
+            if let Some(domain) = entry.strip_prefix("*@")
+                && sender.ends_with(domain) {
+                return Ok(());
+            }
+
             // exact match
-            else if entry == sender {
+            if entry == sender {
                 return Ok(());
             }
         }
@@ -303,6 +308,24 @@ mod tests
         assert!(auth.verify_user_can_send_as("alice@example.com", "bob@example.com").is_ok());
         assert!(auth.verify_user_can_send_as("alice@example.com", "eve@example.com").is_ok());
         assert!(auth.verify_user_can_send_as("alice@example.com", "eve@example.org").is_err());
+
+        // don't care about case
+        assert!(auth.verify_user_can_send_as("alice@example.com", "BOB@Example.com").is_ok());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_check_send_as_any() -> anyhow::Result<()>
+    {
+        let mut auth = UserList::default();
+
+        auth.set_user_password("alice@example.com", "hunter2")?;
+        auth.add_user_send_as("alice@example.com", "*@*")?;
+
+        assert!(auth.verify_user_can_send_as("alice@example.com", "alice@example.com").is_ok());
+        assert!(auth.verify_user_can_send_as("alice@example.com", "bob@example.com").is_ok());
+        assert!(auth.verify_user_can_send_as("alice@example.com", "eve@example.org").is_ok());
 
         // don't care about case
         assert!(auth.verify_user_can_send_as("alice@example.com", "BOB@Example.com").is_ok());
