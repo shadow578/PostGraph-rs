@@ -273,6 +273,22 @@ mod tests
     }
 
     #[test]
+    fn test_username_case_invariant() -> anyhow::Result<()>
+    {
+        let mut auth = UserList::default();
+
+        auth.set_user_password("alice", "hunter2")?;
+
+        assert!(auth.has_user("alice"));
+        assert!(auth.has_user("AlIcE"));
+
+        assert!(auth.verify_user_password("alice", "hunter2").is_ok());
+        assert!(auth.verify_user_password("AlIcE", "hunter2").is_ok());
+
+        Ok(())
+    }
+
+    #[test]
     fn test_user_serialize() -> anyhow::Result<()>
     {
         let mut auth = UserList::default();
