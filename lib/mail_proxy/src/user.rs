@@ -2,12 +2,11 @@ use anyhow::anyhow;
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use log::debug;
 use password_hash::PasswordHasher;
-use serde;
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct UserList
 {
     /// list of configured users.
@@ -54,7 +53,7 @@ where
     D: Deserializer<'de>,
 {
     let hash: String = String::deserialize(deserializer)?;
-    PasswordHash::new(&*hash)
+    PasswordHash::new(&hash)
         .map_err(|e| D::Error::custom(e.to_string()))
 }
 
@@ -79,15 +78,6 @@ impl<'de> Deserialize<'de> for UserList {
 // endregion
 
 // region: auth API
-impl Default for UserList {
-    // create a new UserAuth instance without any users configured.
-    fn default() -> Self {
-        Self {
-            users: HashMap::new(),
-        }
-    }
-}
-
 impl UserList
 {
     /// add or update user entry.
