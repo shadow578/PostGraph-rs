@@ -187,6 +187,10 @@ function Main() {
     & $ExePath --config "$ConfigFile" config reset
   }
 
+  # register event log source
+  Write-Host "Registering PostGraph event log source..." -ForegroundColor Green
+  & $ExePath --config "$ConfigFile" register-eventlog
+
   # setup config acl
   Set-ConfigFilePermissions
 
