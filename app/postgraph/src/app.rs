@@ -1,6 +1,6 @@
 use crate::cli::{Cli, CliCommand};
+use crate::proxy::config_file::ConfigFile;
 use anyhow::{Result, anyhow};
-use mail_proxy::config_file::ConfigFile;
 
 /// Run mail proxy logic (standalone or service mode)
 /// cli: parsed cli args. requires `cli.command != CliCommand::Config`.
@@ -14,7 +14,7 @@ pub(crate) async fn run_mail_proxy(cli: &Cli) -> Result<()> {
             anyhow!("Failed to load configuration file: {}", err)
         })?;
 
-    mail_proxy::proxy::run(config).await?;
+    crate::proxy::proxy::run(config).await?;
 
     Ok(())
 }

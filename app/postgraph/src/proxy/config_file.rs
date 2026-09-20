@@ -1,7 +1,7 @@
-use crate::custom_serde::opt_duration_secs;
-use crate::defaults::{DEFAULT_FAIL2BAN_CONNECTIONS, DEFAULT_FAIL2BAN_DURATION, DEFAULT_FAIL2BAN_FAILS, DEFAULT_SMTP_BIND_ADDRESS};
-use crate::ip_net_list::IpNetList;
-use crate::user::UserList;
+use crate::proxy::custom_serde::opt_duration_secs;
+use crate::proxy::defaults::{DEFAULT_FAIL2BAN_CONNECTIONS, DEFAULT_FAIL2BAN_DURATION, DEFAULT_FAIL2BAN_FAILS, DEFAULT_SMTP_BIND_ADDRESS};
+use crate::proxy::ip_net_list::IpNetList;
+use crate::proxy::user::UserList;
 use anyhow::{Result, anyhow};
 use log::debug;
 use ms_graph::RECOMMENDED_MAX_MESSAGE_SIZE;

@@ -1,6 +1,7 @@
 mod app;
 mod cli;
 mod util;
+mod proxy;
 #[cfg(windows)]
 mod service;
 

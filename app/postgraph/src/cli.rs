@@ -1,3 +1,5 @@
+use crate::proxy::config_file::{ConfigFile, Fail2BanConfig, TLSConfig};
+use crate::proxy::ip_net_list::IpNetList;
 use crate::util::{
     existing_file, mail_address_string, mask_string, parse_ip_addr, parse_ip_net,
     prompt_user_confirmation,
@@ -6,8 +8,6 @@ use base64::Engine;
 use clap::{ArgGroup, Parser};
 use humantime::{format_duration, parse_duration};
 use ipnet::IpNet;
-use mail_proxy::config_file::{ConfigFile, Fail2BanConfig, TLSConfig};
-use mail_proxy::ip_net_list::IpNetList;
 use ms_graph::client::Client as GraphClient;
 use ms_graph::{API_MAX_MESSAGE_SIZE, RECOMMENDED_MAX_MESSAGE_SIZE};
 use std::net::IpAddr;

@@ -1,7 +1,6 @@
 [workspace]
 resolver = "3"
 members = [
-    "lib/mail_proxy",
     "lib/ms_graph",
     "lib/smtp",
     "app/postgraph"

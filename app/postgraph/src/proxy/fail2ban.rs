@@ -157,7 +157,7 @@ impl Fail2Ban
 #[cfg(test)]
 mod tests
 {
-    use crate::fail2ban::{Fail2Ban, Verdict};
+    use super::*;
     use std::net::{IpAddr, Ipv4Addr};
     use std::time::Duration;
 

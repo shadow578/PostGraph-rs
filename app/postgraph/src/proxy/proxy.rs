@@ -1,5 +1,5 @@
-use crate::config_file::ConfigFile;
-use crate::fail2ban::{Fail2Ban, Verdict};
+use crate::proxy::config_file::ConfigFile;
+use crate::proxy::fail2ban::{Fail2Ban, Verdict};
 use anyhow::Result;
 use async_trait::async_trait;
 use log::debug;
