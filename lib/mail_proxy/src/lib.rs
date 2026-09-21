@@ -5,3 +5,4 @@ mod defaults;
 mod custom_serde;
 mod user;
 pub mod ip_net_list;
+mod peer_filter;
