@@ -355,7 +355,7 @@ impl PeersCommand {
                     println!("Peer IP '{}' will be {} due to rule: {}",
                              ip,
                              if action == PeerAction::Allow { "allowed" } else { "denied" },
-                             rule.to_string()
+                             rule
                     )
                 } else {
                     eprintln!("Failed to test ruleset for peer IP '{}'.", ip);
@@ -368,7 +368,7 @@ impl PeersCommand {
     pub(crate) fn show(config: &ConfigFile) {
         println!("Peer Filter Ruleset:");
         for (i, rule) in config.smtp.peer_filter.iter().enumerate() {
-            println!(" [{}] {}", i + 1, rule.to_string());
+            println!(" [{}] {}", i + 1, rule);
         }
     }
 }

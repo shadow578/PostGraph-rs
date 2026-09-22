@@ -3,6 +3,7 @@ use ipnet::IpNet;
 use log::error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
+use std::fmt::{Display, Formatter};
 use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
 
@@ -176,25 +177,27 @@ impl FilterRule
         Ok(Self { action, target })
     }
 
-    /// Convert this rule to a string like "ALLOW:0.0.0.0/0".
-    pub fn to_string(&self) -> String
-    {
-        let action = match self.action {
-            PeerAction::Allow => "ALLOW",
-            PeerAction::Deny => "DENY",
-        };
-        format!("{}:{}", action, self.target.to_string())
-    }
-
     /// Evaluate this rule.
     /// ip: peer IP to evaluate against.
     fn evaluate(&self, ip: &IpAddr) -> Option<PeerAction>
     {
         if self.target.contains(ip) {
-            Some(self.action.clone())
+            Some(self.action)
         } else {
             None
         }
+    }
+}
+
+impl Display for FilterRule
+{
+    /// Convert this rule to a string like "ALLOW:0.0.0.0/0".
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let action = match self.action {
+            PeerAction::Allow => "ALLOW",
+            PeerAction::Deny => "DENY",
+        };
+        write!(f, "{}:{}", action, self.target)
     }
 }
 
@@ -250,12 +253,12 @@ mod tests
 
         // check against behaviour of PeerFilter iter()
         let mut filter = PeerFilter::default();
-        filter.add(host_allow.clone());
-        filter.add(host_deny.clone());
-        filter.add(net_allow.clone());
-        filter.add(net_deny.clone());
-        filter.add(any_allow.clone());
-        filter.add(any_deny.clone());
+        filter.add(host_allow);
+        filter.add(host_deny);
+        filter.add(net_allow);
+        filter.add(net_deny);
+        filter.add(any_allow);
+        filter.add(any_deny);
 
         let filter: Vec<_> = filter.iter().collect();
         assert_eq!(filter[0], host_allow);
@@ -359,7 +362,7 @@ mod tests
         let mut filter = PeerFilter::default();
 
         // two unique rules are accepted
-        assert!(filter.add(host_allow.clone()));
+        assert!(filter.add(host_allow));
         assert!(filter.add(host_deny));
 
         // duplicate is ignored
