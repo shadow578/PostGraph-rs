@@ -1,12 +1,13 @@
 use anyhow::{Result, anyhow};
 use ipnet::IpNet;
+use log::error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
 
 /// Actions for a FilterRule.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum PeerAction
 {
     /// Allow connections from the subnet.
@@ -18,6 +19,7 @@ pub enum PeerAction
 
 /// Provides facilities for filtering peer connections against a configurable ruleset.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct PeerFilter
 {
     /// list of rules configured in the filter.
@@ -26,6 +28,19 @@ pub struct PeerFilter
 
 impl PeerFilter
 {
+    /// Create a new PeerFilter containing a single "ALLOW:0.0.0.0/0" rule.
+    pub fn new_allow_any() -> Self
+    {
+        let allow_any = FilterRule::new(
+            PeerAction::Allow,
+            IpNet::new(Ipv4Addr::new(0, 0, 0, 0).into(), 0).unwrap(), // net is ok, will never panic during unwrap
+        );
+
+        let mut filter = Self::default();
+        filter.add(allow_any);
+        filter
+    }
+
     /// Insert a new rule to the ruleset.
     /// rule: Rule to add.
     pub fn add(&mut self, rule: FilterRule) -> bool
@@ -50,28 +65,55 @@ impl PeerFilter
     /// ip: IP address to evaluate ruleset for.
     pub fn evaluate(&self, ip: &IpAddr) -> PeerAction
     {
-        for rule in self.iter() {
-            if let Some(action) = rule.evaluate(ip) {
-                return action;
-            }
+        if let Some((action, _)) = self.evaluate_with_context(ip) {
+            return action;
         }
 
-        // implicit DENY:0.0.0.0/0 at the end
+        // should never get here due to implicit deny any in iter().
+        // if we do anyway, reject and continue on.
+        error!("evaluate() did not match ANY rule. This should not happen, ever.");
         PeerAction::Deny
     }
 
-    /// Iterate over the ruleset in order of evaluation.
-    pub fn iter(&self) -> impl ExactSizeIterator<Item=&FilterRule>
+    /// Evaluate all rules, returning context for the rule that matched.
+    /// ip: IP address to evaluate ruleset for.
+    pub fn evaluate_with_context(&self, ip: &IpAddr) -> Option<(PeerAction, FilterRule)>
     {
+        for rule in self.iter() {
+            if let Some(action) = rule.evaluate(ip) {
+                return Some((action, rule));
+            }
+        }
+
+        None
+    }
+
+    /// Iterate over the ruleset in order of evaluation.
+    /// This will also add an implicit DENY:0.0.0.0/0 rule to the end.
+    pub fn iter(&self) -> impl Iterator<Item=FilterRule>
+    {
+        let deny_any = FilterRule::new(
+            PeerAction::Deny,
+            IpNet::new(Ipv4Addr::new(0, 0, 0, 0).into(), 0).unwrap(), // net is ok, will never panic during unwrap
+        );
+
         let mut indices: Vec<_> = (0..self.rules.len()).collect();
         indices.sort_by(|&a, &b| Self::filter_rule_cmp(&self.rules[a], &self.rules[b]));
 
         indices
             .into_iter()
-            .map(|i| &self.rules[i])
+            .map(|i| self.rules[i])
+            .chain(std::iter::once(deny_any))
+    }
+
+    /// Are there no rules configured in this filter?
+    pub fn is_empty(&self) -> bool
+    {
+        self.rules.is_empty()
     }
 
 
+    /// Ordering function for evaluation ordering of FilterRule.
     fn filter_rule_cmp(a: &FilterRule, b: &FilterRule) -> Ordering {
         fn get_ord(r: &FilterRule) -> usize {
             let mut v = (r.target.prefix_len() as usize) << 1;
@@ -97,7 +139,7 @@ impl Default for PeerFilter
 
 // region: FilterRule
 /// A filter rule applying to a single IP subnet.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct FilterRule
 {
     /// The action to perform.
@@ -216,12 +258,12 @@ mod tests
         filter.add(any_deny.clone());
 
         let filter: Vec<_> = filter.iter().collect();
-        assert_eq!(*filter[0], host_allow);
-        assert_eq!(*filter[1], host_deny);
-        assert_eq!(*filter[2], net_allow);
-        assert_eq!(*filter[3], net_deny);
-        assert_eq!(*filter[4], any_allow);
-        assert_eq!(*filter[5], any_deny);
+        assert_eq!(filter[0], host_allow);
+        assert_eq!(filter[1], host_deny);
+        assert_eq!(filter[2], net_allow);
+        assert_eq!(filter[3], net_deny);
+        assert_eq!(filter[4], any_allow);
+        assert_eq!(filter[5], any_deny);
 
         Ok(())
     }

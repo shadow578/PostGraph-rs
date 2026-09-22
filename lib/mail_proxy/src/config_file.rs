@@ -1,6 +1,6 @@
 use crate::custom_serde::opt_duration_secs;
 use crate::defaults::{DEFAULT_FAIL2BAN_CONNECTIONS, DEFAULT_FAIL2BAN_DURATION, DEFAULT_FAIL2BAN_FAILS, DEFAULT_SMTP_BIND_ADDRESS};
-use crate::ip_net_list::IpNetList;
+use crate::peer_filter::PeerFilter;
 use crate::user::UserList;
 use anyhow::{Result, anyhow};
 use log::debug;
@@ -39,8 +39,7 @@ impl ConfigFile
                 tls: None,
                 fail2ban: None,
                 users: UserList::default(),
-                allowed_peers: None,
-                denied_peers: None,
+                peer_filter: PeerFilter::new_allow_any(),
             },
             graph: GraphAPIConfig {
                 tenant_id: String::new(),
@@ -105,15 +104,10 @@ pub struct SMTPServerConfig
     /// if no users are configured, authentication will be disabled.
     pub users: UserList,
 
-    /// list of allowed peer IPs.
-    /// if None, any peer is accepted.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub allowed_peers: Option<IpNetList>,
-
-    /// list of denied peer IPs.
-    /// if None, no peer is denied.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub denied_peers: Option<IpNetList>,
+    /// peer filter configuration.
+    /// peers are filtered using this instance upon connection.
+    #[serde(skip_serializing_if = "PeerFilter::is_empty", default)]
+    pub peer_filter: PeerFilter,
 }
 
 impl SMTPServerConfig
