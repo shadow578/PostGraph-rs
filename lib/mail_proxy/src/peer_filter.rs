@@ -4,7 +4,7 @@ use log::error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 
 /// Actions for a FilterRule.
@@ -93,9 +93,13 @@ impl PeerFilter
     /// This will also add an implicit DENY:0.0.0.0/0 rule to the end.
     pub fn iter(&self) -> impl Iterator<Item=FilterRule>
     {
-        let deny_any = FilterRule::new(
+        let deny_any_ipv4 = FilterRule::new(
             PeerAction::Deny,
             IpNet::new(Ipv4Addr::new(0, 0, 0, 0).into(), 0).unwrap(), // net is ok, will never panic during unwrap
+        );
+        let deny_any_ipv6 = FilterRule::new(
+            PeerAction::Deny,
+            IpNet::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0).into(), 0).unwrap(), // net is ok, will never panic during unwrap
         );
 
         let mut indices: Vec<_> = (0..self.rules.len()).collect();
@@ -104,7 +108,8 @@ impl PeerFilter
         indices
             .into_iter()
             .map(|i| self.rules[i])
-            .chain(std::iter::once(deny_any))
+            .chain(std::iter::once(deny_any_ipv4))
+            .chain(std::iter::once(deny_any_ipv6))
     }
 
     /// Are there no rules configured in this filter?
@@ -297,7 +302,7 @@ mod tests
     }
 
     #[test]
-    fn test_peer_filtering() -> Result<()>
+    fn test_peer_filtering_ipv4() -> Result<()>
     {
         let mut filter = PeerFilter::default();
 
@@ -314,6 +319,29 @@ mod tests
         assert_eq!(filter.evaluate(&"10.10.2.1".parse()?), PeerAction::Deny); // deny due to 10.10.2.1/32
         assert_eq!(filter.evaluate(&"192.168.100.1".parse()?), PeerAction::Allow); // allow due to 192.168.100.1/32
         assert_eq!(filter.evaluate(&"80.10.1.1".parse()?), PeerAction::Deny); // deny because not listed -> implicit DENY:0.0.0.0/0
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_peer_filtering_ipv6() -> Result<()>
+    {
+        let mut filter = PeerFilter::default();
+
+        // allow all peers in subnet 2001:db8:10::/48 EXCEPT for subnet
+        // 2001:db8:10:1::/64 and host 2001:db8:10:2::1/128.
+        // also allow host 2001:db8:100::1.
+        filter.add(FilterRule::new(PeerAction::Deny, "2001:db8:10:1::/64".parse()?));
+        filter.add(FilterRule::new(PeerAction::Deny, "2001:db8:10:2::1/128".parse()?));
+        filter.add(FilterRule::new(PeerAction::Allow, "2001:db8:10::/48".parse()?));
+        filter.add(FilterRule::new(PeerAction::Allow, "2001:db8:100::1/128".parse()?));
+
+        assert_eq!(filter.evaluate(&"2001:db8:10:10::1".parse()?), PeerAction::Allow); // allow due to 2001:db8:10::/48
+        assert_eq!(filter.evaluate(&"2001:db8:10:10::10".parse()?), PeerAction::Allow); // allow due to 2001:db8:10::/48
+        assert_eq!(filter.evaluate(&"2001:db8:10:1::11".parse()?), PeerAction::Deny); // deny due to 2001:db8:10:1::/64
+        assert_eq!(filter.evaluate(&"2001:db8:10:2::1".parse()?), PeerAction::Deny); // deny due to 2001:db8:10:2::1/128
+        assert_eq!(filter.evaluate(&"2001:db8:100::1".parse()?), PeerAction::Allow); // allow due to 2001:db8:100::1/128
+        assert_eq!(filter.evaluate(&"2001:db9::1".parse()?), PeerAction::Deny); // deny because not listed
 
         Ok(())
     }
