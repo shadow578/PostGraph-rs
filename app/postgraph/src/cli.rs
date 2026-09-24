@@ -673,15 +673,14 @@ impl UserSendAsCommand {
                 }
 
                 println!("User '{}' is allowed to send as:", username);
-
-                // username is implicitly included in senders
-                println!(" - {}", username);
-
                 if let Ok(senders) = config.smtp.users.list_user_send_as(username)
+                    && senders.len() > 0
                 {
                     for sender in senders {
                         println!(" - {}", sender);
                     }
+                } else {
+                    println!(" (nobody)")
                 }
             }
         }
