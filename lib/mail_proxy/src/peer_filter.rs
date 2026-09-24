@@ -29,16 +29,21 @@ pub struct PeerFilter
 
 impl PeerFilter
 {
-    /// Create a new PeerFilter containing a single "ALLOW:0.0.0.0/0" rule.
+    /// Create a new PeerFilter containing two allow any rules ("ALLOW:0.0.0.0/0" and "ALLOW:::/0").
     pub fn new_allow_any() -> Self
     {
-        let allow_any = FilterRule::new(
+        let allow_any_ipv4 = FilterRule::new(
             PeerAction::Allow,
             IpNet::new(Ipv4Addr::new(0, 0, 0, 0).into(), 0).unwrap(), // net is ok, will never panic during unwrap
         );
+        let allow_any_ipv6 = FilterRule::new(
+            PeerAction::Allow,
+            IpNet::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0).into(), 0).unwrap(), // net is ok, will never panic during unwrap
+        );
 
         let mut filter = Self::default();
-        filter.add(allow_any);
+        filter.add(allow_any_ipv4);
+        filter.add(allow_any_ipv6);
         filter
     }
 

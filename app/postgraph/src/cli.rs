@@ -265,10 +265,8 @@ impl SmtpCommand {
         println!("  Maximum Failures: {}", max_failures);
         println!("  Ban Duration: {}", format_duration(ban_duration));
 
-        if !config.smtp.peer_filter.is_empty() {
-            println!();
-            PeersCommand::show(config);
-        }
+        println!();
+        PeersCommand::show(config);
 
         println!();
         print!("TLS Configuration:");
