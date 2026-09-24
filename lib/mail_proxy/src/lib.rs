@@ -4,4 +4,4 @@ mod fail2ban;
 mod defaults;
 mod custom_serde;
 mod user;
-pub mod ip_net_list;
+pub mod peer_filter;

@@ -7,7 +7,7 @@ use clap::{ArgGroup, Parser};
 use humantime::{format_duration, parse_duration};
 use ipnet::IpNet;
 use mail_proxy::config_file::{ConfigFile, Fail2BanConfig, TLSConfig};
-use mail_proxy::ip_net_list::IpNetList;
+use mail_proxy::peer_filter::{FilterRule, PeerAction};
 use ms_graph::client::Client as GraphClient;
 use ms_graph::{API_MAX_MESSAGE_SIZE, RECOMMENDED_MAX_MESSAGE_SIZE};
 use std::net::IpAddr;
@@ -265,10 +265,8 @@ impl SmtpCommand {
         println!("  Maximum Failures: {}", max_failures);
         println!("  Ban Duration: {}", format_duration(ban_duration));
 
-        if config.smtp.allowed_peers.is_some() || config.smtp.denied_peers.is_some() {
-            println!();
-            PeersCommand::show(config);
-        }
+        println!();
+        PeersCommand::show(config);
 
         println!();
         print!("TLS Configuration:");
@@ -290,28 +288,28 @@ impl SmtpCommand {
 
 #[derive(Parser, Debug)]
 pub(crate) enum PeersCommand {
-    /// Add a subnet to the allow list.
+    /// Add or remove an ALLOW rule for a subnet.
     #[command()]
     Allow {
-        /// The IP network to add.
+        /// The IP subnet.
         #[clap(value_parser = parse_ip_net)]
         network: IpNet,
+
+        /// Should the rule be removed?
+        #[clap(long, short)]
+        remove: bool,
     },
 
-    /// Add a subnet to the deny list.
+    /// Add or remove an DENY rule for a subnet.
     #[command()]
     Deny {
-        /// The IP network to add.
+        /// The IP subnet.
         #[clap(value_parser = parse_ip_net)]
         network: IpNet,
-    },
 
-    /// Remove a subnet from both the allow and deny lists.
-    #[command()]
-    Remove {
-        /// The IP network to remove.
-        #[clap(value_parser = parse_ip_net)]
-        network: IpNet,
+        /// Should the rule be removed?
+        #[clap(long, short)]
+        remove: bool,
     },
 
     /// Check whether an IP address matches the allow and deny rules.
@@ -330,86 +328,45 @@ pub(crate) enum PeersCommand {
 impl PeersCommand {
     async fn execute(&self, config: &mut ConfigFile) {
         match self {
-            PeersCommand::Allow { network } => {
-                if config.smtp.allowed_peers.is_none() {
-                    config.smtp.allowed_peers = Some(IpNetList::default())
+            PeersCommand::Allow { network, remove } => {
+                let rule = FilterRule::new(PeerAction::Allow, *network);
+                if *remove {
+                    config.smtp.peer_filter.remove(&rule);
+                } else {
+                    config.smtp.peer_filter.add(rule);
                 }
-
-                config.smtp.allowed_peers.as_mut().unwrap().add(*network);
 
                 Self::show(config);
             }
-            PeersCommand::Deny { network } => {
-                if config.smtp.denied_peers.is_none() {
-                    config.smtp.denied_peers = Some(IpNetList::default())
-                }
-
-                config.smtp.denied_peers.as_mut().unwrap().add(*network);
-
-                Self::show(config);
-            }
-            PeersCommand::Remove { network } => {
-                if let Some(allowlist) = config.smtp.allowed_peers.as_mut() {
-                    allowlist.remove(*network);
-                    if allowlist.is_empty() {
-                        config.smtp.allowed_peers = None;
-                    }
-                }
-
-                if let Some(denylist) = config.smtp.denied_peers.as_mut() {
-                    denylist.remove(*network);
-                    if denylist.is_empty() {
-                        config.smtp.denied_peers = None;
-                    }
+            PeersCommand::Deny { network, remove } => {
+                let rule = FilterRule::new(PeerAction::Deny, *network);
+                if *remove {
+                    config.smtp.peer_filter.remove(&rule);
+                } else {
+                    config.smtp.peer_filter.add(rule);
                 }
 
                 Self::show(config);
             }
             PeersCommand::Test { ip } => {
-                if let Some(allowlist) = config.smtp.allowed_peers.as_ref()
-                    && !allowlist.contains(*ip)
-                {
-                    println!(
-                        "Peer IP '{}' will be rejected because it is not included in the allow list.",
-                        ip
-                    );
-                    return;
+                if let Some((action, rule)) = config.smtp.peer_filter.evaluate_with_context(ip) {
+                    println!("Peer IP '{}' will be {} due to rule: {}",
+                             ip,
+                             if action == PeerAction::Allow { "allowed" } else { "denied" },
+                             rule
+                    )
+                } else {
+                    eprintln!("Failed to test ruleset for peer IP '{}'.", ip);
                 }
-                if let Some(denylist) = config.smtp.denied_peers.as_ref()
-                    && denylist.contains(*ip)
-                {
-                    println!(
-                        "Peer IP '{}' will be rejected because it is included in the deny list.",
-                        ip
-                    );
-                    return;
-                }
-
-                println!("Peer IP '{}' will be accepted.", ip);
             }
             PeersCommand::Show => Self::show(config),
         }
     }
 
     pub(crate) fn show(config: &ConfigFile) {
-        let mut printed_allowlist = false;
-        if let Some(allowlist) = config.smtp.allowed_peers.as_ref() {
-            printed_allowlist = true;
-            println!("Allow peers only from these subnets:");
-            for net in allowlist.iter() {
-                println!("  - {}", net);
-            }
-        }
-
-        if let Some(denylist) = config.smtp.denied_peers.as_ref() {
-            if printed_allowlist {
-                println!()
-            }
-
-            println!("Deny peers in these subnets:");
-            for net in denylist.iter() {
-                println!("  - {}", net);
-            }
+        println!("Peer Filter Ruleset:");
+        for (i, rule) in config.smtp.peer_filter.iter().enumerate() {
+            println!(" [{}] {}", i + 1, rule);
         }
     }
 }

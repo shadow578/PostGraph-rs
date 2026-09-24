@@ -1,5 +1,6 @@
 use crate::config_file::ConfigFile;
 use crate::fail2ban::{Fail2Ban, Verdict};
+use crate::peer_filter::PeerAction;
 use anyhow::Result;
 use async_trait::async_trait;
 use log::debug;
@@ -64,13 +65,7 @@ impl SmtpHandler for ProxyHandler {
         }
 
         // connection peer filter
-        if let Some(allowlist) = self.config.smtp.allowed_peers.as_ref()
-            && !allowlist.contains(peer_addr) {
-            return Ok(ConnectResult::Reject);
-        }
-
-        if let Some(denylist) = self.config.smtp.denied_peers.as_ref()
-            && denylist.contains(peer_addr) {
+        if self.config.smtp.peer_filter.evaluate(&peer_addr) != PeerAction::Allow {
             return Ok(ConnectResult::Reject);
         }
 
