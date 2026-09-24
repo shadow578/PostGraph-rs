@@ -24,7 +24,6 @@ struct UserEntry
     password: PasswordHash,
 
     /// list of mail addresses this user may send as.
-    /// the user may always send using a mail address matching their username.
     /// this list may contain exact entries (alice@example.com) or whole domains entries (*@example.com).
     #[serde(
         rename = "send_as",
@@ -100,7 +99,10 @@ impl UserList
             user.password = hash;
         } else {
             debug!("Adding user {}", username);
-            self.users.insert(username, UserEntry { password: hash, allow_send_as: HashSet::new() });
+            self.users.insert(username.clone(), UserEntry { password: hash, allow_send_as: HashSet::new() });
+
+            // insert default self sender permission for new user
+            self.add_user_send_as(&username, &username)?;
         }
 
         Ok(())
@@ -212,12 +214,6 @@ impl UserList
         let username = username.to_lowercase();
         let sender = sender.to_lowercase();
 
-        // check for username match
-        if sender == username.to_lowercase() {
-            return Ok(());
-        }
-
-        // check allow_send_as
         let user = &self.users.get(&username)
             .ok_or_else(|| anyhow!("user {} not found", username))?;
 
@@ -354,6 +350,23 @@ mod tests
         auth.remove_user_send_as("alice@example.com", "bob@example.com")?;
 
         assert!(auth.verify_user_can_send_as("alice@example.com", "bob@example.com").is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_check_send_as_self_default() -> anyhow::Result<()>
+    {
+        let mut auth = UserList::default();
+
+        auth.set_user_password("alice@example.com", "hunter2")?;
+
+        assert!(auth.verify_user_can_send_as("alice@example.com", "alice@example.com").is_ok());
+
+        // remove self permission
+        auth.remove_user_send_as("alice@example.com", "alice@example.com")?;
+
+        assert!(auth.verify_user_can_send_as("alice@example.com", "alice@example.com").is_err());
 
         Ok(())
     }
